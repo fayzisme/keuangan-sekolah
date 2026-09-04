@@ -1,0 +1,29 @@
+# =====================================================================
+# Guardrails repo — hal yang TIDAK BOLEH masuk git.
+# =====================================================================
+
+# --- Environment & secrets (WAJIB) ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+
+# --- Node / React ---
+node_modules/
+web/dist/
+web/.vite/
+
+# --- PHP / Composer ---
+app/vendor/
+app/storage/*.key
+app/storage/logs/*.log
+app/.phpunit.result.cache
+app/.php-cs-fixer.cache
+
+# --- IDE / OS ---
+.idea/
+.vscode/
+.DS_Store
+*.swp

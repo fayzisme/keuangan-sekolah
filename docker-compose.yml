@@ -1,0 +1,134 @@
+name: school-finance
+
+# =====================================================================
+# FASE 1 — 1 VPS, Docker Compose (nginx + Laravel php-fpm + worker +
+#          scheduler + PostgreSQL + Redis). DB/Redis TIDAK di-expose
+#          ke publik; hanya nginx yang mem-publish port 80/443.
+# Salin .env.example -> .env, isi nilai, lalu `docker compose up -d`.
+# =====================================================================
+
+x-app-env: &app-env
+  APP_NAME: ${APP_NAME:-School Finance}
+  APP_ENV: ${APP_ENV:-production}
+  APP_KEY: ${APP_KEY:-}
+  APP_DEBUG: ${APP_DEBUG:-false}
+  APP_URL: ${APP_URL:-http://localhost}
+  LOG_CHANNEL: ${LOG_CHANNEL:-stderr}
+  DB_CONNECTION: pgsql
+  DB_HOST: postgres
+  DB_PORT: 5432
+  DB_DATABASE: ${DB_DATABASE:-school_finance}
+  DB_USERNAME: ${DB_USERNAME:-school_finance}
+  DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD wajib diisi di .env}
+  REDIS_HOST: redis
+  REDIS_PORT: 6379
+  REDIS_PASSWORD: ${REDIS_PASSWORD:-null}
+  REDIS_CLIENT: phpredis
+  CACHE_STORE: redis
+  QUEUE_CONNECTION: redis
+  SESSION_DRIVER: redis
+  SESSION_SECURE_COOKIE: ${APP_ENV:-production} == production
+  SANCTUM_STATEFUL_DOMAINS: ${SANCTUM_STATEFUL_DOMAINS:-}
+  FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
+
+services:
+  # ------- Reverse proxy (satu-satunya yang expose ke internet) -------
+  nginx:
+    image: nginx:1.27-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./web/dist:/var/www/web:ro
+    depends_on:
+      app:
+        condition: service_healthy
+    networks: [appnet]
+    restart: unless-stopped
+
+  # ------- Aplikasi Laravel (php-fpm, non-root www-data) -------------
+  app:
+    image: ghcr.io/${GITHUB_REPOSITORY:-owner/repo}-app:${APP_IMAGE_TAG:-latest}
+    build:
+      context: .
+      dockerfile: app/Dockerfile
+    environment: *app-env
+    volumes:
+      - app_storage:/var/www/html/storage
+    networks: [appnet]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "php", "-r", "exit((@fsockopen('postgres',5432))?0:1);"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  # ------- Queue worker (job lambat; tidak pernah blokir request) -----
+  worker:
+    image: ghcr.io/${GITHUB_REPOSITORY:-owner/repo}-app:${APP_IMAGE_TAG:-latest}
+    command: php artisan queue:work --tries=3 --backoff=10 --sleep=3
+    environment: *app-env
+    volumes:
+      - app_storage:/var/www/html/storage
+    networks: [appnet]
+    restart: unless-stopped
+    depends_on:
+      - postgres
+      - redis
+
+  # ------- Scheduler (generate invoice, reminder, rekonsiliasi) --------
+  scheduler:
+    image: ghcr.io/${GITHUB_REPOSITORY:-owner/repo}-app:${APP_IMAGE_TAG:-latest}
+    command: php artisan schedule:work
+    environment: *app-env
+    volumes:
+      - app_storage:/var/www/html/storage
+    networks: [appnet]
+    restart: unless-stopped
+    depends_on:
+      - postgres
+      - redis
+
+  # ------- Source of truth (internal-only, tanpa port ke host) --------
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${DB_DATABASE:-school_finance}
+      POSTGRES_USER: ${DB_USERNAME:-school_finance}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD wajib diisi}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks: [appnet]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-school_finance} -d ${DB_DATABASE:-school_finance}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ------- Redis (cache + queue + session) ----------------------------
+  redis:
+    image: redis:7-alpine
+    command: >
+      sh -c 'exec redis-server --appendonly yes
+      ${REDIS_PASSWORD:+--requirepass "$REDIS_PASSWORD"}'
+    volumes:
+      - redisdata:/data
+    networks: [appnet]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+networks:
+  appnet:
+    driver: bridge
+
+volumes:
+  pgdata:
+  redisdata:
+  app_storage:

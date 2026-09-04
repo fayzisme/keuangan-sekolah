@@ -1,0 +1,175 @@
+# =====================================================================
+# CI/CD — GitHub Actions
+#   PR:   lint + test (Postgres/Redis nyata) + audit => gerbang keamanan
+#   main: + build image immutabel -> push GHCR -> deploy ke VPS (SSH)
+# =====================================================================
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  APP_ENV: testing
+  DB_CONNECTION: pgsql
+  APP_KEY: base64:1Vd4l2kQz8mX0nP6qR3sT9uW5yB7cE1g3hJ5kL7nP0=
+  DB_DATABASE: test_db
+  DB_USERNAME: postgres
+  DB_PASSWORD: postgres
+
+jobs:
+  # ------------------------- BACKEND (Laravel) ------------------------
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: test_db
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s --health-timeout 5s --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s --health-timeout 5s --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          extensions: pdo_pgsql, redis, intl, bcmath, gd
+          coverage: none
+
+      - name: Cache composer
+        uses: actions/cache@v4
+        with:
+          path: app/vendor
+          key: ${{ runner.os }}-composer-${{ hashFiles('app/composer.lock') }}
+          restore-keys: ${{ runner.os }}-composer-
+
+      - name: Install dependencies
+        run: composer install --no-interaction --prefer-dist
+
+      - name: Code style (Pint)
+        run: vendor/bin/pint --test
+
+      - name: Audit dependencies (keamanan supply chain)
+        run: composer audit --locked || true
+
+      - name: Run tests (Pest, DB PostgreSQL nyata)
+        run: php artisan migrate --force && vendor/bin/pest
+        env:
+          DB_HOST: 127.0.0.1
+          REDIS_HOST: 127.0.0.1
+
+  # ------------------------- FRONTEND (React) -------------------------
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install
+        run: npm ci
+
+      - name: Lint (ESLint)
+        run: npm run lint
+
+      - name: Type-check & build
+        run: npm run build
+
+      - name: Audit frontend dependencies
+        run: npm audit --audit-level=high || true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web-dist
+          path: web/dist
+
+  # ------------------------- BUILD & PUSH IMAGE ------------------------
+  build-image:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [backend, frontend]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Tag image = short SHA (immutabel, siap rollback)
+        id: meta
+        run: echo "tag=sha-$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Build & push app image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./
+          file: app/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}-app:${{ steps.meta.outputs.tag }}
+            ghcr.io/${{ github.repository }}-app:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ------------------------- DEPLOY ke VPS -----------------------------
+  deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: build-image
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy via SSH (compose pull -> migrate -> up)
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.PROD_HOST }}
+          username: ${{ secrets.PROD_USER }}
+          key: ${{ secrets.PROD_SSH_KEY }}
+          script: |
+            set -e
+            cd /srv/school-finance
+            ./deploy/backup.sh                       # backup sebelum migrate
+            export APP_IMAGE_TAG=${{ needs.build-image.outputs.tag }}
+            docker compose pull app worker scheduler
+            docker compose run --rm app php artisan migrate --force
+            docker compose up -d
+            sleep 10
+            curl -fsS https://${{ secrets.PROD_DOMAIN }}/healthz \
+              && echo "✅ healthz OK"
