@@ -72,6 +72,12 @@ Route::middleware(['auth:sanctum', 'school.context'])->group(function () {
         Route::get('/payments', [PaymentController::class, 'index']);
         Route::get('/payments/{id}', [PaymentController::class, 'show'])->whereNumber('id');
 
+        // Payments (write) — maker & checker sama grup: bendahara catat manual,
+        // verify pembayaran user LAIN (role admin|bendahara). Guard
+        // "ne peut pas verifier propre paiement" reside di controller.
+        Route::post('/payments/manual', [PaymentController::class, 'store']);
+        Route::post('/payments/{id}/verify', [PaymentController::class, 'verify'])->whereNumber('id');
+
         // Reports (read)
         Route::get('/reports/student/{studentId}', [ReportController::class, 'student'])->whereNumber('studentId');
         Route::get('/reports/class/{classId}', [ReportController::class, 'class'])->whereNumber('classId');
@@ -111,9 +117,7 @@ Route::middleware(['auth:sanctum', 'school.context'])->group(function () {
         Route::post('/invoices/generate', [InvoiceController::class, 'generate']);
         Route::post('/invoices/{id}/void', [InvoiceController::class, 'void'])->whereNumber('id');
 
-        // Payments (write)
-        Route::post('/payments/manual', [PaymentController::class, 'store']);
-        Route::post('/payments/{id}/verify', [PaymentController::class, 'verify'])->whereNumber('id');
+        // Payments (write) — verify sudah di grup role:admin|bendahara.
 
         // Reports (write)
         Route::post('/reports/ledger/{id}/reverse', [ReportController::class, 'reverseLedger'])->whereNumber('id');

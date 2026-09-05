@@ -11,21 +11,6 @@ use Laravel\Sanctum\Sanctum;
 
 uses(RefreshDatabase::class);
 
-function seededSchool(string $name = 'SMA A')
-{
-    $school = School::create(['name' => $name]);
-    $year = AcademicYear::create(['school_id' => $school->id, 'name' => '2025/2026', 'semester' => 'ganjil']);
-    $bt = BillType::create(['school_id' => $school->id, 'name' => 'SPP', 'tipe_bayar' => 'monthly', 'tarif_cents' => 300000]);
-    $student = Student::create(['school_id' => $school->id, 'nis' => 'A-1', 'name' => 'Siswa A', 'is_active' => true]);
-    $invoice = BillingInvoice::create([
-        'school_id' => $school->id, 'student_id' => $student->id, 'bill_type_id' => $bt->id,
-        'academic_year_id' => $year->id, 'periode_bulan' => 1, 'periode_tahun' => 2025,
-        'amount_cents' => 300000, 'status' => 'OPEN',
-    ]);
-
-    return [$school, $year, $bt, $student, $invoice];
-}
-
 it('creates manual payment with allocation to one invoice', function () {
     [$school, $year, $bt, $student, $invoice] = seededSchool();
     $creator = makeScopedUser($school, 'bendahara');

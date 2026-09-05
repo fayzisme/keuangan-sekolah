@@ -1,10 +1,7 @@
 <?php
 
-use App\Domain\Billing\Models\BillingInvoice;
-use App\Domain\Billing\Models\BillType;
 use App\Domain\Billing\Models\Payment;
 use App\Domain\School\Models\School;
-use App\Domain\Student\Models\Student;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
 
@@ -32,8 +29,9 @@ it('murid cannot read payments', function () {
 it('payments index scoped to school (no cross-school leak)', function () {
     $schoolA = School::create(['name' => 'SMA A']);
     $schoolB = School::create(['name' => 'SMA B']);
+    $cashier = makeScopedUser($schoolB, 'bendahara');
     $paymentB = Payment::create([
-        'school_id' => $schoolB->id, 'created_by' => 1, 'method' => 'CASH', 'status' => 'SETTLED', 'total_cents' => 100,
+        'school_id' => $schoolB->id, 'created_by' => $cashier->id, 'method' => 'CASH', 'status' => 'SETTLED', 'total_cents' => 100,
     ]);
 
     Sanctum::actingAs(makeScopedUser($schoolA));
@@ -45,8 +43,9 @@ it('payments index scoped to school (no cross-school leak)', function () {
 it('show payment from another school -> 404', function () {
     $schoolA = School::create(['name' => 'SMA A']);
     $schoolB = School::create(['name' => 'SMA B']);
+    $cashier = makeScopedUser($schoolB, 'bendahara');
     $paymentB = Payment::create([
-        'school_id' => $schoolB->id, 'created_by' => 1, 'method' => 'CASH', 'status' => 'SETTLED', 'total_cents' => 100,
+        'school_id' => $schoolB->id, 'created_by' => $cashier->id, 'method' => 'CASH', 'status' => 'SETTLED', 'total_cents' => 100,
     ]);
 
     Sanctum::actingAs(makeScopedUser($schoolA));
@@ -68,18 +67,3 @@ it('creator cannot verify own payment -> 409 maker-checker', function () {
     // Same user tries to verify -> 409
     $this->postJson("/api/v1/payments/{$payment->id}/verify")->assertStatus(409);
 });
-
-function seededSchool(string $name = 'SMA A')
-{
-    $school = School::create(['name' => $name]);
-    $year = AcademicYear::create(['school_id' => $school->id, 'name' => '2025/2026', 'semester' => 'ganjil']);
-    $bt = BillType::create(['school_id' => $school->id, 'name' => 'SPP', 'tipe_bayar' => 'monthly', 'tarif_cents' => 300000]);
-    $student = Student::create(['school_id' => $school->id, 'nis' => 'A-1', 'name' => 'Siswa A', 'is_active' => true]);
-    $invoice = BillingInvoice::create([
-        'school_id' => $school->id, 'student_id' => $student->id, 'bill_type_id' => $bt->id,
-        'academic_year_id' => $year->id, 'periode_bulan' => 1, 'periode_tahun' => 2025,
-        'amount_cents' => 300000, 'status' => 'OPEN',
-    ]);
-
-    return [$school, $year, $bt, $student, $invoice];
-}

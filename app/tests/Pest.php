@@ -1,6 +1,10 @@
 <?php
 
+use App\Domain\Billing\Models\BillingInvoice;
+use App\Domain\Billing\Models\BillType;
+use App\Domain\School\Models\AcademicYear;
 use App\Domain\School\Models\School;
+use App\Domain\Student\Models\Student;
 use App\Models\User;
 use Spatie\Permission\Models\Role;
 use Spatie\Permission\PermissionRegistrar;
@@ -32,4 +36,27 @@ function makeScopedUser(School $school, string $roleName = 'admin'): User
     $user->assignRole($roleName);
 
     return $user;
+}
+
+/**
+ * Helper test: seed sekolah + tahun ajaran + bill type + murid + invoice (OPEN).
+ * Dipakai bersama oleh test pembayaran. Didefinisikan sekali di sini untuk
+ * menghindari fatal "Cannot redeclare function" saat dua file test mendeklarasikan
+ * fungsi global dengan nama sama.
+ */
+if (! function_exists('seededSchool')) {
+    function seededSchool(string $name = 'SMA A'): array
+    {
+        $school = School::create(['name' => $name]);
+        $year = AcademicYear::create(['school_id' => $school->id, 'name' => '2025/2026', 'semester' => 'ganjil']);
+        $bt = BillType::create(['school_id' => $school->id, 'name' => 'SPP', 'tipe_bayar' => 'monthly', 'tarif_cents' => 300000]);
+        $student = Student::create(['school_id' => $school->id, 'nis' => 'A-1', 'name' => 'Siswa A', 'is_active' => true]);
+        $invoice = BillingInvoice::create([
+            'school_id' => $school->id, 'student_id' => $student->id, 'bill_type_id' => $bt->id,
+            'academic_year_id' => $year->id, 'periode_bulan' => 1, 'periode_tahun' => 2025,
+            'amount_cents' => 300000, 'status' => 'OPEN',
+        ]);
+
+        return [$school, $year, $bt, $student, $invoice];
+    }
 }

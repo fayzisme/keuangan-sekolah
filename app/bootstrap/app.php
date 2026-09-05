@@ -29,5 +29,14 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withExceptions(function (Exceptions $exceptions): void {
         // Semua error response dalam bentuk JSON karena backend adalah API murni.
         $exceptions->shouldRenderJsonWhen(fn () => true);
+
+        // ADR-0013 idempotency & maker-checker: RuntimeException ber-code 409
+        // (mis. "Idempotency-Key sudah dipakai", "pencatat tidak boleh verify") 
+        // dirender sebagai HTTP 409, bukan 500.
+        $exceptions->render(function (RuntimeException $e, $request) {
+            if ($e->getCode() === 409) {
+                return response()->json(['message' => $e->getMessage()], 409);
+            }
+        });
     })
     ->create();

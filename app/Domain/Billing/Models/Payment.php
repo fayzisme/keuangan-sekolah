@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\MorphOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
@@ -66,7 +67,7 @@ final class Payment extends Model
 
     public function invoices(): BelongsToMany
     {
-        return $this->belongsToMany(BillingInvoice::class, 'payment_invoice')
+        return $this->belongsToMany(BillingInvoice::class, 'payment_invoice', 'payment_id', 'invoice_id')
             ->withPivot('allocated_cents')
             ->withTimestamps();
     }
@@ -76,8 +77,8 @@ final class Payment extends Model
         return $this->morphOne(LedgerEntry::class, 'ref');
     }
 
-    public function receipt(): MorphOne
+    public function receipt(): HasOne
     {
-        return $this->morphOne(Receipt::class, 'payment');
+        return $this->hasOne(Receipt::class, 'payment_id');
     }
 }

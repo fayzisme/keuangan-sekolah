@@ -54,6 +54,12 @@ final class PaymentController extends Controller
             'created_by' => $request->user()->id,
         ]);
 
+        // Idempotency-Key dikirim via HTTP header (bukan body), sesuai
+        // ADR-0013: baca header agar hash gateway_trx_id konsisten.
+        if ($key = $request->header('Idempotency-Key')) {
+            $data['idempotency_key'] = $key;
+        }
+
         $payment = $action($data);
 
         return response()->json($payment->load('invoices'), 201);

@@ -17,6 +17,7 @@ uses(RefreshDatabase::class);
 function seedReportData()
 {
     $school = School::create(['name' => 'SMA A']);
+    $cashier = makeScopedUser($school, 'bendahara');
     $year = AcademicYear::create(['school_id' => $school->id, 'name' => '2025/2026', 'semester' => 'ganjil']);
     $class = ClassRoom::create(['school_id' => $school->id, 'academic_year_id' => $year->id, 'name' => 'X IPA 1', 'level' => 10]);
     $bt = BillType::create(['school_id' => $school->id, 'name' => 'SPP', 'tipe_bayar' => 'monthly', 'tarif_cents' => 300000]);
@@ -30,19 +31,18 @@ function seedReportData()
     $invG = BillingInvoice::create(['school_id' => $school->id, 'student_id' => $s1->id, 'bill_type_id' => $btGedung->id, 'academic_year_id' => $year->id, 'periode_bulan' => null, 'periode_tahun' => 2025, 'amount_cents' => 1500000, 'status' => 'OPEN']);
 
     // Bayar 100k untuk inv1
-    $p1 = Payment::create(['school_id' => $school->id, 'created_by' => 1, 'method' => 'CASH', 'status' => Payment::STATUS_SETTLED, 'total_cents' => 100000]);
+    $p1 = Payment::create(['school_id' => $school->id, 'created_by' => $cashier->id, 'method' => 'CASH', 'status' => Payment::STATUS_SETTLED, 'total_cents' => 100000]);
     $p1->invoices()->attach($inv1->id, ['allocated_cents' => 100000]);
 
     // Bayar 300k untuk inv3 (lunas)
-    $p2 = Payment::create(['school_id' => $school->id, 'created_by' => 1, 'method' => 'CASH', 'status' => Payment::STATUS_SETTLED, 'total_cents' => 300000]);
+    $p2 = Payment::create(['school_id' => $school->id, 'created_by' => $cashier->id, 'method' => 'CASH', 'status' => Payment::STATUS_SETTLED, 'total_cents' => 300000]);
     $p2->invoices()->attach($inv3->id, ['allocated_cents' => 300000]);
 
     return [$school, $year, $class, $bt, $btGedung, $s1, $s2, $inv1, $inv2, $inv3, $invG, $p1, $p2];
 }
 
 it('arrears report returns sisa > 0 per invoice', function () {
-    seedReportData();
-    $school = School::first();
+    [$school, $year, $class, $bt, $btGedung, $s1, $s2, $inv1, $inv2, $inv3, $invG, $p1, $p2] = seedReportData();
     $action = new GenerateArrearsReportAction;
 
     $report = $action($school->id, []);
@@ -109,9 +109,9 @@ it('student report calculates totals correctly', function () {
 
     $report = $action($school->id, $s1->id);
 
-    expect($report['total_tagihan_cents'])->toBe(2400000); // 300k+300k+1.5M
+    expect($report['total_tagihan_cents'])->toBe(2100000); // inv1 300k + inv2 300k + invG 1.5M (s1)
     expect($report['total_dibayar_cents'])->toBe(100000); // only inv1 100k
-    expect($report['sisa_cents'])->toBe(2300000);
+    expect($report['sisa_cents'])->toBe(2000000);
 });
 
 it('class report sums correctly', function () {

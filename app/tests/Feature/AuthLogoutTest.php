@@ -24,6 +24,11 @@ it('revokes current token after logout', function () {
         ->assertNoContent(); // 204
 
     // Token yang sama tidak valid lagi.
+    // NOTE: app di-refresh agar guard sanctum tidak me-cache user dari request
+    // sebelumnya (guard singleton per-instance app). Di produksi setiap request
+    // adalah proses terpisah, jadi ini murni artefak testing.
+    $this->refreshApplication();
+
     $this->withHeader('Authorization', 'Bearer '.$token)
         ->getJson('/api/v1/auth/me')
         ->assertStatus(401);

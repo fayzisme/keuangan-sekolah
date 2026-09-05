@@ -17,7 +17,7 @@ concurrency:
 env:
   APP_ENV: testing
   DB_CONNECTION: pgsql
-  APP_KEY: base64:1Vd4l2kQz8mX0nP6qR3sT9uW5yB7cE1g3hJ5kL7nP0=
+  APP_KEY: base64:BuYzhiH8bJXemHVhvXQmNdSDO+hGptftZOXXocpR6Cg=
   DB_DATABASE: test_db
   DB_USERNAME: postgres
   DB_PASSWORD: postgres

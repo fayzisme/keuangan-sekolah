@@ -81,10 +81,12 @@ final class StudentController extends Controller
 
         // Cegah duplikat: re-attach guardian yang sama = idempoten (metadata di-update).
         if ($student->guardians()->where('guardians.id', $request->guardian_id)->exists()) {
-            $student->guardians()->updateExistingPivot($request->guardian_id, [
-                'relation' => $request->get('relation', 'wali'),
-                'is_primary' => (bool) $request->get('is_primary', false),
-            ]);
+            $updateData = ['relation' => $request->get('relation', 'wali')];
+            // Hanya update is_primary jika eksplisit dikirim dalam request
+            if ($request->has('is_primary')) {
+                $updateData['is_primary'] = (bool) $request->get('is_primary');
+            }
+            $student->guardians()->updateExistingPivot($request->guardian_id, $updateData);
         } else {
             $action($student, (int) $request->guardian_id, $request->get('relation', 'wali'), (bool) $request->get('is_primary', false));
         }

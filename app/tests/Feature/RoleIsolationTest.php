@@ -47,8 +47,9 @@ it('isolates role per school (admin di S1 tidak berlaku di S2)', function () {
     app(PermissionRegistrar::class)->setPermissionsTeamId($schoolA->id);
     $user->assignRole('admin');
 
-    // Murid di School B
+    // Murid di School B — teams mode: role harus dibuat ulang di konteks team B
     app(PermissionRegistrar::class)->setPermissionsTeamId($schoolB->id);
+    Role::findOrCreate('murid', 'sanctum');
     $user->assignRole('murid');
 
     // Konteks aktif School A -> admin, akses diterima
@@ -62,6 +63,12 @@ it('isolates role per school (admin di S1 tidak berlaku di S2)', function () {
     // Konteks aktif School B -> hanya murid, akses ditolak 403
     $user->schools()->updateExistingPivot($schoolA->id, ['is_active' => false]);
     $user->schools()->updateExistingPivot($schoolB->id, ['is_active' => true]);
+
+    // Relasi roles & sekolah sudah ter-load pada request pertama (konteks A).
+    // Bersihkan agar request berikutnya membaca ulang dari DB sesuai school B
+    // (di produksi tiap request = app fresh, jadi ini artefak harness test).
+    $user->unsetRelation('roles');
+    $user->unsetRelation('schools');
 
     $this->getJson('/api/v1/auth/users')->assertStatus(403);
 });

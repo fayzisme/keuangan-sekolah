@@ -14,6 +14,9 @@ final class ClassRoom extends Model
     use HasFactory;
     use SoftDeletes;
 
+    // Migrasi memakai tabel `classes` (bukan konvensi Eloquent `class_rooms`).
+    protected $table = 'classes';
+
     protected $fillable = [
         'school_id',
         'academic_year_id',

@@ -24,7 +24,7 @@
     </source>
     <php>
         <env name="APP_ENV" value="testing"/>
-        <env name="APP_KEY" value="base64:1Vd4l2kQz8mX0nP6qR3sT9uW5yB7cE1g3hJ5kL7nP0="/>
+        <env name="APP_KEY" value="base64:BuYzhiH8bJXemHVhvXQmNdSDO+hGptftZOXXocpR6Cg="/>
         <env name="CACHE_STORE" value="array"/>
         <env name="SESSION_DRIVER" value="array"/>
         <env name="QUEUE_CONNECTION" value="sync"/>

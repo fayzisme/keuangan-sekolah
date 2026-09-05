@@ -46,7 +46,7 @@ it('exports arrears PDF via endpoint', function () {
     $response = $this->getJson('/api/v1/exports/arrears/pdf');
     $response->assertOk()
         ->assertHeader('Content-Type', 'application/pdf')
-        ->assertHeaderContains('Content-Disposition', 'attachment; filename=laporan-tunggakan-SMA A-');
+        ->assertHeaderContains('Content-Disposition', 'attachment; filename="laporan-tunggakan-SMA A-');
 });
 
 it('exports arrears Excel via endpoint', function () {
@@ -57,7 +57,7 @@ it('exports arrears Excel via endpoint', function () {
     $response = $this->getJson('/api/v1/exports/arrears/excel');
     $response->assertOk()
         ->assertHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-        ->assertHeaderContains('Content-Disposition', 'attachment; filename=tunggakan-SMA A-');
+        ->assertHeaderContains('Content-Disposition', 'attachment; filename="tunggakan-SMA A-');
 });
 
 it('rejects export from different school (tenant isolation)', function () {
