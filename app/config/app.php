@@ -16,8 +16,10 @@ return [
         'store' => env('APP_MAINTENANCE_STORE', 'database'),
     ],
     // Kunci level-platform untuk endpoint onboarding sekolah.
-    // Wajib diisi DI LUAR produksi? Tidak — WAJIB diisi di production, kosong=dimatikan (503).
+    // Wajib diisi di production, kosong=dimatikan (503).
     'platform_key' => env('PLATFORM_KEY'),
-    // Laravel 12 mendaftarkan provider via bootstrap/providers.php (dipakai kernel).
-    'providers' => [],
+    // NOTE: jangan set 'providers' => [] di sini.
+    // Laravel 12 memakai `config('app.providers') ?? DefaultProviders`.
+    // Nilai [] (array kosong) membuat default provider framework TIDAK diregistrasi
+    // (termasuk FilesystemServiceProvider -> binding 'files'), sehingga app gagal boot.
 ];

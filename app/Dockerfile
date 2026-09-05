@@ -12,7 +12,7 @@ RUN composer install --no-dev --no-interaction --no-progress --no-scripts \
     --prefer-dist --optimize-autoloader
 
 # ---- Stage 2: runtime ----
-FROM php:8.3-fpm-bookworm
+FROM php:8.4-fpm-bookworm
 
 # System deps + ekstensi PHP
 RUN apt-get update \
