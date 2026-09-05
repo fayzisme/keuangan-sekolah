@@ -4,7 +4,19 @@
 # =====================================================================
 
 # ---- Stage 1: vendor (composer install dengan lock) ----
-FROM composer:2 AS vendor
+# Dibangun di atas PHP CLI 8.4 + ekstensi IDENTIK dengan runtime, agar
+# platform-check composer (ext-gd, intl, bcmath, zip, etc.) lolos dan
+# paket bundled (PhpSpreadsheet butuh ext-gd) valid di runtime.
+FROM php:8.4-cli-bookworm AS vendor
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        libpq-dev libicu-dev libzip-dev libpng-dev libjpeg-dev libwebp-dev \
+        libfreetype6-dev unzip git \
+    && docker-php-ext-configure gd --with-freetype --with-jpeg \
+    && docker-php-ext-install -j"$(nproc)" pdo_pgsql intl zip bcmath gd \
+    && pecl install redis && docker-php-ext-enable redis \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+# composer binary dari image resmi
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 WORKDIR /app
 COPY app/composer.json app/composer.lock ./
 # --no-scripts: tidak jalankan post-install yang butuh DB saat build
