@@ -31,7 +31,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->shouldRenderJsonWhen(fn () => true);
 
         // ADR-0013 idempotency & maker-checker: RuntimeException ber-code 409
-        // (mis. "Idempotency-Key sudah dipakai", "pencatat tidak boleh verify") 
+        // (mis. "Idempotency-Key sudah dipakai", "pencatat tidak boleh verify")
         // dirender sebagai HTTP 409, bukan 500.
         $exceptions->render(function (RuntimeException $e, $request) {
             if ($e->getCode() === 409) {
