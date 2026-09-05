@@ -4,9 +4,6 @@ namespace App\Domain\Reports\Actions;
 
 use App\Domain\Billing\Models\BillingInvoice;
 use App\Domain\Billing\Models\Payment;
-use App\Domain\School\Models\AcademicYear;
-use App\Domain\School\Models\ClassRoom;
-use App\Domain\Student\Models\Student;
 use Illuminate\Support\Facades\DB;
 
 final class GenerateArrearsReportAction
@@ -42,7 +39,9 @@ final class GenerateArrearsReportAction
 
             $sisa = $inv->amount_cents - $paid;
 
-            if ($sisa <= 0) continue;
+            if ($sisa <= 0) {
+                continue;
+            }
 
             $results[] = [
                 'invoice_id' => $inv->id,

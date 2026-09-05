@@ -6,9 +6,8 @@ use App\Domain\Billing\Models\BillingInvoice;
 use App\Domain\Billing\Models\Payment;
 use App\Domain\School\Models\School;
 use App\Domain\Student\Models\Student;
-use Illuminate\Support\Facades\DB;
-use Illuminate\View\Facades\View;
 use Barryvdh\DomPDF\Facade\Pdf as DomPDF;
+use Illuminate\Support\Facades\DB;
 
 final class ExportStudentReportAction
 {
@@ -62,7 +61,7 @@ final class ExportStudentReportAction
         ])->setPaper('a4', 'portrait');
 
         return [
-            'filename' => "laporan-siswa-{$student->nis}-" . date('Ymd') . ".pdf",
+            'filename' => "laporan-siswa-{$student->nis}-".date('Ymd').'.pdf',
             'content' => $pdf->output(),
             'mime' => 'application/pdf',
         ];

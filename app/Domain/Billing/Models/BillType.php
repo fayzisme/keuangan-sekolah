@@ -2,9 +2,9 @@
 
 namespace App\Domain\Billing\Models;
 
+use App\Domain\School\Models\AcademicYear;
 use App\Domain\School\Models\School;
 use App\Domain\Student\Models\Student;
-use App\Domain\School\Models\AcademicYear;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;

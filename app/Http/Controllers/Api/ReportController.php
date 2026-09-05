@@ -29,6 +29,7 @@ final class ReportController extends Controller
     public function arrears(Request $request, GenerateArrearsReportAction $action): JsonResponse
     {
         $filters = $request->only(['class_id', 'academic_year_id', 'bill_type_id']);
+
         return response()->json(
             $action($request->attributes->get('school_id'), $filters)
         );
@@ -50,7 +51,7 @@ final class ReportController extends Controller
 
         return response($csv, 200, [
             'Content-Type' => 'text/csv; charset=utf-8',
-            'Content-Disposition' => 'attachment; filename="tunggakan-' . date('Ymd') . '.csv"',
+            'Content-Disposition' => 'attachment; filename="tunggakan-'.date('Ymd').'.csv"',
         ]);
     }
 

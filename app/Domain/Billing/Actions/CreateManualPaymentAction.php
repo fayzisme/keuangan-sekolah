@@ -34,7 +34,7 @@ final class CreateManualPaymentAction
 
         // Idempotency: hash gateway_trx_id dari idempotency-key (atau fallback random)
         $key = $data['idempotency_key'] ?? null;
-        $trxId = $key ? 'CASH-' . hash('sha256', $schoolId . ':' . $key) : null;
+        $trxId = $key ? 'CASH-'.hash('sha256', $schoolId.':'.$key) : null;
 
         if ($trxId && Payment::where('gateway_trx_id', $trxId)->exists()) {
             throw new RuntimeException('Pembayaran dengan Idempotency-Key ini sudah dicatat.', 409);

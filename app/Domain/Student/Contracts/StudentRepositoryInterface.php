@@ -2,7 +2,6 @@
 
 namespace App\Domain\Student\Contracts;
 
-use App\Domain\School\Models\School;
 use App\Domain\Student\Models\Student;
 
 /**
@@ -16,6 +15,7 @@ interface StudentRepositoryInterface
 {
     /**
      * Murid aktif di sekolah yang berspesificirum.
+     *
      * @return list<Student>; kosong bila none.
      */
     public function findActiveBySchool(int $schoolId): array;

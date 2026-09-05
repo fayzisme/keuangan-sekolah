@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Domain\Billing\Models\BillingInvoice;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -37,7 +38,7 @@ final class StoreManualPaymentRequest extends FormRequest
 
             // Validasi: invoice harus milik sekolah aktif, belum PAID/VOID
             foreach ($allocations as $i => $alloc) {
-                $invoice = \App\Domain\Billing\Models\BillingInvoice::query()
+                $invoice = BillingInvoice::query()
                     ->where('school_id', $schoolId)
                     ->whereKey($alloc['invoice_id'])
                     ->first();

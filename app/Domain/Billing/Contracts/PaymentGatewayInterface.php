@@ -17,6 +17,7 @@ interface PaymentGatewayInterface
 
     /**
      * Verify webhook signature provider.
+     *
      * @return array parsed payload bila valid; @throws RuntimeException bila tamper.
      */
     public function verifyWebhookSignature(

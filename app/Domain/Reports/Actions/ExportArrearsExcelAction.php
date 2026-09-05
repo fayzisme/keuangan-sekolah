@@ -4,14 +4,12 @@ namespace App\Domain\Reports\Actions;
 
 use App\Domain\Billing\Models\BillingInvoice;
 use App\Domain\Billing\Models\Payment;
-use App\Domain\School\Models\ClassRoom;
 use App\Domain\School\Models\School;
-use App\Domain\Student\Models\Student;
 use Illuminate\Support\Facades\DB;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
-use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
-use PhpOffice\PhpSpreadsheet\Style\NumberFormat;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
 final class ExportArrearsExcelAction
 {
@@ -47,7 +45,9 @@ final class ExportArrearsExcelAction
 
             $sisa = $inv->amount_cents - $paid;
 
-            if ($sisa <= 0) continue;
+            if ($sisa <= 0) {
+                continue;
+            }
 
             $results[] = [
                 'nis' => $inv->student->nis,
@@ -63,7 +63,7 @@ final class ExportArrearsExcelAction
         }
 
         // Create spreadsheet
-        $spreadsheet = new Spreadsheet();
+        $spreadsheet = new Spreadsheet;
         $sheet = $spreadsheet->getActiveSheet();
         $sheet->setTitle('Tunggakan');
 
@@ -73,7 +73,7 @@ final class ExportArrearsExcelAction
 
         // Style header
         $sheet->getStyle('A1:I1')->getFont()->setBold(true);
-        $sheet->getStyle('A1:I1')->getFill()->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)->getStartColor()->setARGB('FFE2E8F0');
+        $sheet->getStyle('A1:I1')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('FFE2E8F0');
         $sheet->getStyle('A1:I1')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
 
         // Data
@@ -113,11 +113,11 @@ final class ExportArrearsExcelAction
 
         // Write to temporary file
         $writer = new Xlsx($spreadsheet);
-        $tempPath = sys_get_temp_dir() . "/tunggakan-{$school->name}-" . date('Ymd') . ".xlsx";
+        $tempPath = sys_get_temp_dir()."/tunggakan-{$school->name}-".date('Ymd').'.xlsx';
         $writer->save($tempPath);
 
         return [
-            'filename' => "tunggakan-{$school->name}-" . date('Ymd') . ".xlsx",
+            'filename' => "tunggakan-{$school->name}-".date('Ymd').'.xlsx',
             'path' => $tempPath,
             'mime' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         ];

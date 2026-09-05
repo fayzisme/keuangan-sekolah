@@ -28,8 +28,7 @@ final class MidtransGateway implements PaymentGatewayInterface
         string $rawBody,
         string $signatureHeader,
         array $providerConfig,
-    ): array
-    {
+    ): array {
         // TODO(post-MVP): signature per provider dokumentasi (Midtrans snap:
         //   sha512(order_id+status_code+gross_amount+server_key)).
         //   Original body dibaca raw, dicek byte-for-byte.

@@ -2,6 +2,7 @@
 
 namespace App\Domain\School\Actions;
 
+use App\Domain\School\Models\School;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -20,7 +21,7 @@ final class OnboardSchoolAction
     public function __invoke(array $data): array
     {
         return DB::transaction(function () use ($data) {
-            $school = \App\Domain\School\Models\School::create([
+            $school = School::create([
                 'name' => $data['name'],
             ]);
 

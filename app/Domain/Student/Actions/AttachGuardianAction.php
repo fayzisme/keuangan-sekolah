@@ -3,7 +3,6 @@
 namespace App\Domain\Student\Actions;
 
 use App\Domain\Student\Models\Student;
-use Illuminate\Database\Eloquent\Builder;
 
 final class AttachGuardianAction
 {

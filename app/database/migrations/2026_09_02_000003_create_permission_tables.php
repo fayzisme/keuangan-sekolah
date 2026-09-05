@@ -21,10 +21,10 @@ return new class extends Migration
         $pivotPermission = $columnNames['permission_pivot_key'] ?? 'permission_id';
 
         if (empty($tableNames)) {
-            throw new \Exception('Error: config/permission.php not loaded. Run [php artisan config:clear] and try again.');
+            throw new Exception('Error: config/permission.php not loaded. Run [php artisan config:clear] and try again.');
         }
         if ($teams && empty($columnNames['team_foreign_key'] ?? null)) {
-            throw new \Exception('Error: permission.teams must be set to true when permission.column_names.team_foreign_key not set.');
+            throw new Exception('Error: permission.teams must be set to true when permission.column_names.team_foreign_key not set.');
         }
 
         Schema::create($tableNames['permissions'], function (Blueprint $table) use ($teams, $columnNames) {
@@ -140,7 +140,7 @@ return new class extends Migration
         $tableNames = config('permission.table_names');
 
         if (empty($tableNames)) {
-            throw new \Exception('Error: config/permission.php not found and defaults could not be merged. Please publish the package configuration before proceeding, or drop the tables manually.');
+            throw new Exception('Error: config/permission.php not found and defaults could not be merged. Please publish the package configuration before proceeding, or drop the tables manually.');
         }
 
         Schema::dropIfExists($tableNames['role_has_permissions']);

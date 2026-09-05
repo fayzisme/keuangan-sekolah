@@ -10,7 +10,6 @@ use App\Http\Requests\StoreManualPaymentRequest;
 use App\Http\Requests\VerifyPaymentRequest;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Spatie\Permission\PermissionRegistrar;
 
 final class PaymentController extends Controller
 {

@@ -4,7 +4,6 @@ namespace App\Http\Requests;
 
 use App\Domain\Student\Models\Guardian;
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Validation\Rule;
 
 final class AttachGuardianRequest extends FormRequest
 {

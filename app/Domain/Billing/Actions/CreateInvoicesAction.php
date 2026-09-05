@@ -5,9 +5,7 @@ namespace App\Domain\Billing\Actions;
 use App\Domain\Billing\Data\CreateInvoicesDTO;
 use App\Domain\Billing\Models\BillingInvoice;
 use App\Domain\Student\Contracts\StudentRepositoryInterface;
-use App\Domain\School\Models\AcademicYear;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 use RuntimeException;
 
 /**
@@ -28,12 +26,13 @@ final class CreateInvoicesAction
 
     /**
      * @return int nomur invoice yang dibuat
+     *
      * @throws RuntimeException bila periode duplikaat di-detekti
      */
     public function __invoke(CreateInvoicesDTO $dto): int
     {
         $billType = $dto->billType;   // load oleh caller, validasi role/tenant
-        $year     = $dto->academicYear;
+        $year = $dto->academicYear;
 
         // Kunci: periode unik per (school, student, bill_type) dipaksa
         // di DB (UNIQUE constraint migration). Batch tetap dikerjakan
@@ -47,11 +46,11 @@ final class CreateInvoicesAction
             try {
                 DB::transaction(function () {
                     $exists = BillingInvoice::query()
-                        ->where('school_id',        $dto->schoolId)
-                        ->where('student_id',       $student->id)
-                        ->where('bill_type_id',     $billType->id)
+                        ->where('school_id', $dto->schoolId)
+                        ->where('student_id', $student->id)
+                        ->where('bill_type_id', $billType->id)
                         ->where('academic_year_id', $year->id)
-                        ->where('period',           $dto->period)
+                        ->where('period', $dto->period)
                         ->exists();
 
                     if ($exists) {
@@ -62,17 +61,17 @@ final class CreateInvoicesAction
                     $amountCents = $billType->amountFor($student, $year);
 
                     BillingInvoice::query()->create([
-                        'school_id'        => $dto->schoolId,
-                        'student_id'       => $student->id,
-                        'bill_type_id'     => $billType->id,
+                        'school_id' => $dto->schoolId,
+                        'student_id' => $student->id,
+                        'bill_type_id' => $billType->id,
                         'academic_year_id' => $year->id,
-                        'period'           => $dto->period,
-                        'due_at'           => $dto->dueAt,
-                        'amount_cents'     => $amountCents,
-                        'status'           => BillingInvoice::STATUS_OPEN,
+                        'period' => $dto->period,
+                        'due_at' => $dto->dueAt,
+                        'amount_cents' => $amountCents,
+                        'status' => BillingInvoice::STATUS_OPEN,
                     ]);
 
-                    ++$created;
+                    $created++;
                 });
             } catch (Throwable $e) {
                 // Transaction sudah roolback pada siswa ini.

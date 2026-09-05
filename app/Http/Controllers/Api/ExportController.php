@@ -18,7 +18,7 @@ final class ExportController extends Controller
         $result = $action($schoolId, $studentId);
 
         return response()->streamDownload(
-            fn () => print($result['content']),
+            fn () => print ($result['content']),
             $result['filename'],
             ['Content-Type' => $result['mime']]
         );
@@ -31,7 +31,7 @@ final class ExportController extends Controller
         $result = $action($schoolId, $filters);
 
         return response()->streamDownload(
-            fn () => print($result['content']),
+            fn () => print ($result['content']),
             $result['filename'],
             ['Content-Type' => $result['mime']]
         );

@@ -7,12 +7,13 @@ use App\Domain\School\Actions\UpdateAcademicYearAction;
 use App\Domain\School\Models\AcademicYear;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\AcademicYearRequest;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 final class AcademicYearController extends Controller
 {
-    private function scoped(Request $request): \Illuminate\Database\Eloquent\Builder
+    private function scoped(Request $request): Builder
     {
         return AcademicYear::query()->where('school_id', $request->attributes->get('school_id'));
     }

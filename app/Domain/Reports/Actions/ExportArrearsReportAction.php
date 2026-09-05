@@ -4,11 +4,9 @@ namespace App\Domain\Reports\Actions;
 
 use App\Domain\Billing\Models\BillingInvoice;
 use App\Domain\Billing\Models\Payment;
-use App\Domain\School\Models\ClassRoom;
 use App\Domain\School\Models\School;
-use App\Domain\Student\Models\Student;
-use Illuminate\Support\Facades\DB;
 use Barryvdh\DomPDF\Facade\Pdf as DomPDF;
+use Illuminate\Support\Facades\DB;
 
 final class ExportArrearsReportAction
 {
@@ -44,7 +42,9 @@ final class ExportArrearsReportAction
 
             $sisa = $inv->amount_cents - $paid;
 
-            if ($sisa <= 0) continue;
+            if ($sisa <= 0) {
+                continue;
+            }
 
             $results[] = [
                 'invoice_id' => $inv->id,
@@ -71,7 +71,7 @@ final class ExportArrearsReportAction
         ])->setPaper('a4', 'landscape');
 
         return [
-            'filename' => "laporan-tunggakan-{$school->name}-" . date('Ymd') . ".pdf",
+            'filename' => "laporan-tunggakan-{$school->name}-".date('Ymd').'.pdf',
             'content' => $pdf->output(),
             'mime' => 'application/pdf',
         ];

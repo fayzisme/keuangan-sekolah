@@ -19,8 +19,11 @@ final class BillingInvoice extends Model
     protected $table = 'invoices';
 
     public const STATUS_OPEN = 'OPEN';
+
     public const STATUS_PARTIAL = 'PARTIAL';
+
     public const STATUS_PAID = 'PAID';
+
     public const STATUS_VOID = 'VOID';
 
     protected $fillable = [
