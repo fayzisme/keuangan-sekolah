@@ -1,128 +1,199 @@
-# RUNBOOK — Deploy Manual VPS
+# RUNBOOK — Deploy & Operasi VPS School Finance
 
-> **Versi:** 1.0 · **Target:** VPS `43.173.7.25` · Ubuntu 24.04 LTS
+> **Versi:** 2.0 (Complete) · **Target:** VPS `43.173.7.25` · Ubuntu 24.04 LTS · 4vCPU/8GB (rekomendasi)
 > **Repo:** https://github.com/fayzisme/keuangan-sekolah (public, branch `main`)
-> **Alur:** bootstrap server → clone → build frontend → `.env` → compose up → healthz → pilot sekolah → HTTPS → backup cron → monitoring
+> **Stack:** nginx 1.27 · Laravel 12 php-fpm 8.4 · PostgreSQL 16 · Redis 7 · queue worker + scheduler
 >
-> Jalur ini untuk **deploy manual** (opsi runbook). Alternatif CI: workflow `.github/workflows/ci.yml` job `deploy` memakai GitHub Secrets `PROD_HOST`, `PROD_USER`, `PROD_SSH_KEY`, `PROD_DOMAIN` (belum dikonfigurasi — opsional).
+> Jalur deploy dua opsi: **A — manual runbook** (dokument ini), **B — CI GitHub Actions** (job `deploy`, butuh secrets).
 
 ---
 
-## 0. Prasyarat
+## 1. Arsitektur (apa yang di-deploy)
 
-1. **Domain + DNS:** buat A record `<DOMAIN>` → `43.173.7.25` (wajib sebelum langkah HTTPS, §7).
-2. **SSH key laptop:** `ssh-keygen -t ed25519` (bila belum punya); public key siap di-copy.
-3. **Akses root VPS** via console/panel provider (jaring pengaman bila SSH hardening salah).
+```
+Internet ──► UFW (22,80,443 only)
+               └─► nginx:1.27 (TLS + reverse proxy + rate limit + security headers)
+                     └─► app: php:8.4-fpm (Laravel 12, non-root www-data, port internal 9000)
+                     └─► worker:  php artisan queue:work  (job lambat, retry 3x backoff 10s)
+                     └─► scheduler: php artisan schedule:work  (invoice, reminder, rekonsiliasi)
+                     └─► postgres:16-alpine (PORTER 5432 TIDAK exposé ke host)
+                     └─► redis:7-alpine (PORTER 6379 TIDAK exposé ke host)
+Volumes: pgdata (DB), redisdata (AOF), app_storage (upload bukti, log, session)
+```
+
+- **DB/Redis internal-only** (`appnet` bridge); **nginx** semata yang expose :80/:443.
+- **Image immutable**: build 1x di CI (GHCR) atau lokal `docker compose build`; di-deploy image yang **sama**, bukan build di server (hasil CI hash-pinned `sha-<short>`).
 
 ---
 
-## 1. Bootstrap server — root (sekali saja)
+## 2. Prasyarat (di laptop)
+
+| # | Item | Catatan |
+|---|---|---|
+| 1 | Domain + DNS A record `<DOMAIN>` → `43.173.7.25` | Wajib propagar ≥ 5 min sebelum §8 HTTPS |
+| 2 | SSH key laptop | `ssh-keygen -t ed25519 -C laptop` bila belum punya |
+| 3 | Akses root VPS (SSH root / console panel) | Safety net bila SSH hardening mis-lock |
+| 4 | Repo konfigurasi | `git clone https://github.com/fayzisme/keuangan-sekolah` (public) |
+
+---
+
+## 3. Phase 0 — Registrasi akses deploy (keystone!)
+
+Kalau deploy dijalankan dari automasi (CI / agent sandbox), **public key automasi wajib** di `authorized_keys` **root** VPS:
+
+```bash
+# (di VPS — via console panel ATAU ssh root dulu)
+echo 'ssh-ed25519 AAAA... <komentar>' >> /root/.ssh/authorized_keys
+chmod 600 /root/.ssh/authorized_keys
+```
+
+Verifikasi dari sender automasi:
+
+```bash
+ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes root@43.173.7.25 'echo OK && id'
+```
+
+| Role di VPS | Akses | Pakai untuk |
+|---|---|---|
+| `root` | bootstrap (satu kali) + recovery | `deploy/bootstrap.sh` meng-hardening SSH |
+| `deploy` | semua operasi harian (clone, compose, backup) | runbook §4–§11 |
+
+---
+
+## 4. Phase 1 — Bootstrap server (root, satu kali)
 
 ```bash
 ssh root@43.173.7.25
 
-# --- 1a. User deploy + SSH key laptop ---
+# 4a. Buat user deploy + groups
 adduser deploy && usermod -aG sudo deploy
+usermod -aG docker deploy          # WAJIB: backup.sh + CI compose jalankan `docker compose` polos
+
+# 4b. SSH key (laptop ATAU automasi) -> deploy
 mkdir -p /home/deploy/.ssh
-echo 'ssh-ed25519 AAAA... <komentar-laptop>' > /home/deploy/.ssh/authorized_keys
+echo 'ssh-ed25519 AAAA... <komentar>' > /home/deploy/.ssh/authorized_keys
 chown -R deploy:deploy /home/deploy/.ssh
 chmod 700 /home/deploy/.ssh && chmod 600 /home/deploy/.ssh/authorized_keys
 
-# --- 1b. Grup docker (deploy harus bisa `docker compose` polos) ---
-usermod -aG docker deploy
-
-# --- 1c. Jalankan bootstrap (idempotent, aman diulang) ---
-# UFW 22/80/443 + fail2ban + unattended-upgrades + Docker + SSH hardening key-only
+# 4c. Jalankan bootstrap (idempotent, aman diulang)
 curl -fsSL https://raw.githubusercontent.com/fayzisme/keuangan-sekolah/main/deploy/bootstrap.sh -o /tmp/bootstrap.sh
 chmod +x /tmp/bootstrap.sh
 sudo bash /tmp/bootstrap.sh
 ```
 
-> ⚠️ `bootstrap.sh` meng-hardening SSH **hanya bila** `/home/deploy/.ssh/authorized_keys` tidak kosong (guard built-in). Test dari laptop dulu:
-> ```bash
-> ssh deploy@43.173.7.25
-> ```
+### 4d. Apa yang bootstrap.sh konfigure (ceklist)
+
+| Item | Cek |
+|---|---|
+| User `deploy` (non-root, sudo docker compose scoped) | `id deploy` |
+| UFW: `OpenSSH` (22) + `80/tcp` + `443/tcp` | `sudo ufw status` |
+| fail2ban (SSH brute-force) | `sudo fail2ban-client status sshd` |
+| unattended-upgrades (OS security auto) | `systemctl is-active unattended-upgrades` |
+| Docker Engine + Compose plugin | `docker --version && docker compose version` |
+| SSH hardening: `PasswordAuthentication no`, `PermitRootLogin no` | `sudo sshd -T \| grep -E 'passwordauthentication\|permitrootlogin'` |
+
+> ⚠️ **Guard built-in**: hardening SSH aktif **hanya bila** `/home/deploy/.ssh/authorized_keys` non-empty. Test SEBELUM kelar root: `exit` poi `ssh deploy@43.173.7.25`.
+
+### Validation Phase 1
+
+```bash
+ssh deploy@43.173.7.25 'echo OK; sudo ufw status | grep -E "22|80|443" | wc -l'
+# → OK + 3 (baris rule UFW)
+```
 
 ---
 
-## 2. Clone repo + build frontend (user deploy)
+## 5. Phase 2 — Clone repo + build frontend (user deploy)
 
 ```bash
 ssh deploy@43.173.7.25
-sudo apt update && sudo apt install -y git jq   # jq opsional (pretty JSON)
-
+sudo apt update && sudo apt install -y git jq
 sudo mkdir -p /srv/school-finance && sudo chown deploy:deploy /srv/school-finance
 git clone https://github.com/fayzisme/keuangan-sekolah.git /srv/school-finance
 cd /srv/school-finance
 ```
 
-`web/dist` di-gitignore → wajib di-build (nginx me-mount `./web/dist`):
+**`web/dist` di-gitignore → wajib di-build** (nginx mount `./web/dist`; tanpa build → SPA 404):
 
-**Opsi B — build di server (tanpa node di host):**
-```bash
-mkdir -p /srv/school-finance/web/dist
-docker run --rm -v /srv/school-finance:/app -w /app/web node:20-alpine \
-  sh -c 'npm ci && npm run build && ls dist/index.html'
-```
+| Opsi | Perintah | Note |
+|---|---|---|
+| **A. Build di laptop, scp** | `npm ci && npm run build` pui `scp -r web/dist deploy@IP:/srv/school-finance/web/` | bila laptop punya node |
+| **B. Build di server via Docker** | `mkdir -p web/dist && docker run --rm -v /srv/school-finance:/app -w /app/web node:20-alpine sh -c 'npm ci && npm run build && ls dist/index.html'` | tanpa node di host (rekomendasi) |
 
-**Opsi A — build di laptop, lalu scp:**
+### Validation Phase 2
+
 ```bash
-# di laptop: cd school-finance && npm ci && npm run build
-scp -r web/dist deploy@43.173.7.25:/srv/school-finance/web/
+test -s web/dist/index.html && echo "dist OK: $(du -sh web/dist | cut -f1)"
 ```
 
 ---
 
-## 3. `.env` — secret produksi (dibuat hanya di server, tidak pernah masuk git)
+## 6. Phase 3 — `.env` secret produksi (solo di server)
 
 ```bash
 cd /srv/school-finance
 cp .env.example .env
-nano .env
+nano .env            # isi sesuai tabel
+chmod 600 .env
 ```
 
-Nilai yang di-generate:
-
-| Variabel | Perintah | Catatan |
+| Variable | Generate | Regola |
 |---|---|---|
-| `APP_KEY` | `echo "base64:$(openssl rand -base64 32)"` | AES-256 valid (32 byte) |
-| `DB_PASSWORD` | `openssl rand -base64 24` | kuat, min 16 karakter acak |
+| `APP_KEY` | `echo "base64:$(openssl rand -base64 32)"` | AES-256-CBC (32 byte exact; invalid bila ≠ 32) |
+| `DB_PASSWORD` | `openssl rand -base64 24` | kuat min 16 char; protege data seluruh sekolah |
 | `REDIS_PASSWORD` | `openssl rand -hex 16` | |
-| `PLATFORM_KEY` | `openssl rand -hex 32` | dipakai header `X-Platform-Key` saat onboarding |
+| `PLATFORM_KEY` | `openssl rand -hex 32` | header `X-Platform-Key`; kosong → onboarding 503 (amat) |
 | `APP_URL` | `https://<DOMAIN>` | |
-| `FRONTEND_URL` | `https://<DOMAIN>` | |
-| `SANCTUM_STATEFUL_DOMAINS` | `<DOMAIN>` | |
+| `FRONTEND_URL` | `https://<DOMAIN>` | CORS Sanctum |
+| `SANCTUM_STATEFUL_DOMAINS` | `<DOMAIN>` | stateful cookie domain |
 
-Akhiri dengan: `chmod 600 .env`
+> ⚠️ **`.env` tidak pernah masuk git** (gitignore blok. `.env.*` kecuali `.env.example`).
 
 ---
 
-## 4. Build image + up stack
+## 7. Phase 4 — Build image + migrate + up stack
 
 ```bash
 cd /srv/school-finance
-docker compose build app                         # build image (composer install dalam stage vendor)
-docker compose up -d postgres redis              # DB/Redis lebih dulu
-docker compose run --rm app php artisan migrate --force   # migrate SEBELUM app up
-docker compose up -d                             # nginx + app + worker + scheduler
-docker compose ps                                # semua service Up (healthy)
-docker compose logs --tail=50 app
+docker compose build app                         # build image + composer install in stage vendor
+docker compose up -d postgres redis              # DB/Redis piu dulu (healthcheck start)
+docker compose run --rm app php artisan migrate --force
+docker compose up -d                             # nginx app worker scheduler
+docker compose ps
 ```
 
-> Image di-tag lokal `ghcr.io/owner/repo-app:latest` (var `GITHUB_REPOSITORY` default). Rollback via pin tag git + rebuild, lihat §9.
+### Urutan korekta (kenapa ini order)
 
----
+1. **build app** — image name `ghcr.io/owner/repo-app:latest` (default `GITHUB_REPOSITORY`) → **localhost build wajib** bila tidak ada GHCR image; `compose up` akan try pull & gagal.
+2. **up postgres redis** — migrate butuh DB up & healthy.
+3. **migrate SEBELUM app up** — app boot butuh schema siap (foreign keys, partial indexes).
+4. **up -d** — order service stack (nginx depends_on app healthy).
 
-## 5. Health check + smoke test (HTTP)
+### Validation Phase 4
 
 ```bash
-curl -s http://localhost/healthz | jq .          # {"status":"ok","database":"ok","cache":"ok",...}
-curl -s http://localhost/api/v1/ping | jq .      # {"status":"ok","message":"School Finance API v1 siap."}
+docker compose ps --format 'table {{.Name}}\t{{.Service}}\t{{.State}}\t{{.Status}}'
+# semua State=Up; app status (healthy); postgres/redis healthy
+docker compose logs --tail=30 app     # geen error boot; "Server started"
 ```
 
 ---
 
-## 6. Pilot sekolah pertama (onboarding platform)
+## 8. Phase 5 — Health check + smoke
+
+```bash
+curl -s http://localhost/healthz | jq .
+# → {"status":"ok","database":"ok","cache":"ok", ...} (routes/web.php /healthz)
+
+curl -s http://localhost/api/v1/ping | jq .
+# → {"status":"ok","message":"School Finance API v1 siap."}
+```
+
+Semua **HTTP 200**. Bila 500/connection → §12 Troubleshooting.
+
+---
+
+## 9. Phase 6 — Pilot sekolah pertama (onboarding)
 
 ```bash
 cd /srv/school-finance
@@ -136,122 +207,159 @@ curl -s -X POST http://localhost/api/v1/platform/schools \
     "admin_email": "admin@pilot.sch.id",
     "admin_password": "S3cur3-Passw0rd!"
   }' | jq .
-# → HTTP 201: { school:{id,name}, admin:{id,name,email} }
-#   (role:admin di-team sekolah dibuat otomatis dalam satu transaksi)
+# → 201 {school:{id,name}, admin:{id,name,email}} — transazione atomica:
+#   School + User + pivot active + role:admin team-scope (OnboardSchoolAction)
+```
 
-# Login + cek /me (Sanctum bearer)
+Test login + RBAC:
+
+```bash
 TOKEN=$(curl -s -X POST http://localhost/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email":"admin@pilot.sch.id","password":"S3cur3-Passw0rd!"}' | jq -r .token)
 curl -s http://localhost/api/v1/auth/me -H "Authorization: Bearer $TOKEN" | jq .
+curl -s http://localhost/api/v1/classes -H "Authorization: Bearer $TOKEN" | jq .   # admin → 200 []
 ```
 
-Alur uji fungsional: login → master data (academic year, kelas, siswa) → bill-types → generate invoice → pembayaran manual + verifikasi → laporan → export PDF/Excel.
+### Jalur uji fungsional end-to-end
+
+login → master data (academic year, kelas, siswa, guardian) → bill-types → `POST /invoices/generate` → payment manual `POST /payments/manual` (Idempotency-Key) → verify `POST /payments/{id}/verify` (maker ≠ checker) → report `/reports/student/{id}` → export PDF `/exports/student/{id}/pdf` + Excel `/exports/arrears/excel`.
 
 ---
 
-## 7. HTTPS — Let's Encrypt
-
-Prasyarat: DNS A record sudah menunjuk ke `43.173.7.25`.
+## 10. Phase 7 — HTTPS Let's Encrypt
 
 ```bash
 cd /srv/school-finance
 sudo apt install -y certbot
-mkdir -p web/dist/.well-known                    # webroot challenge
+mkdir -p web/dist/.well-known
 sudo certbot certonly --webroot -w /srv/school-finance/web/dist \
   -d <DOMAIN> --agree-tos --no-eff-email -m admin@<DOMAIN>
-```
 
-Aktifkan konfig TLS (template sudah berisi CSP, HSTS, TLS 1.2+):
-
-```bash
 sed 's/<DOMAIN>/<DOMAIN>/g' deploy/nginx/https.conf.example > deploy/nginx/default.conf
 docker compose restart nginx
-curl -fsS https://<DOMAIN>/healthz | jq .                       # OK
-curl -sI https://<DOMAIN> | grep -i strict-transport-security    # HSTS aktif
 ```
 
-> HSTS `max-age=1y` sudah aktif di template — hanya setelah HTTPS terbukti stabil (jangan dimatikan).
+### Validation Phase 7
+
+```bash
+curl -fsS https://<DOMAIN>/healthz | jq .     # 200
+curl -sI https://<DOMAIN> | grep -iE 'strict-transport|content-security'
+curl -sI https://<DOMAIN> | grep '^HTTP'       # 200 (no HSTS on plain redirect)
+```
+
+> HSTS `max-age=1y` aktif di template — jangan dimatikan, bila HTTPS terbukti stabil. Redirect :80→:443 di blok bawah template.
 
 ---
 
-## 8. Backup harian (cron; 02:00 WIB = 19:00 UTC)
+## 11. Phase 8 — Backup harian + uji restore (wajib bulanan)
 
 ```bash
-crontab -e    # sebagai user deploy
-```
-```cron
+crontab -e    # user deploy
+# 02:00 WIB = 19:00 UTC
 0 19 * * * cd /srv/school-finance && ./deploy/backup.sh >> /var/log/school-finance-backup.log 2>&1
+
+# test imediato
+./deploy/backup.sh && ls -lh /var/backups/school-finance/
 ```
 
-Uji segera:
-```bash
-cd /srv/school-finance && ./deploy/backup.sh && ls -lh /var/backups/school-finance/
-```
+**Uji restore bulanan (RPO ≤ 24h, RTO ≤ 4h):**
 
-**Uji restore bulanan (wajib):**
 ```bash
-gzip -dk /var/backups/school-finance/school-<stempel-waktu>.sql.gz
+gzip -dk /var/backups/school-finance/school-<stempel>.sql.gz
 docker compose exec -T -e PGPASSWORD="$DB_PASSWORD" postgres \
-  psql -U "$DB_USERNAME" -d "$DB_DATABASE" < /var/backups/school-finance/school-<stempel-waktu>.sql
-# bandingkan jumlah baris tabel kunci dengan produksi
+  psql -U "$DB_USERNAME" -d "$DB_DATABASE" < /var/backups/school-finance/school-<stempel>.sql
+# bandingkan count baris tabel kunci (users, schools, invoices, payments) produksi vs restore
 ```
 
-> Enkripsi backup: set `GPG_KEY_ID` di `.env`, lalu nyalakan blok `gpg` di `deploy/backup.sh`.
+> Enkripsi: set `GPG_KEY_ID` in `.env` + uncomment blok `gpg` in `deploy/backup.sh`.
 
 ---
 
-## 9. Update & rollback
+## 12. Phase 9 — Monitoring & operasional
+
+| Keperluan | Alat / Perintah |
+|---|---|
+| Uptime | Uptime Kuma / UptimeRobot → `https://<DOMAIN>/healthz` interval 5 min, alert Telegram |
+| Error tracking | Sentry (free tier) — SDK PHP + JS, `DSN` in `.env` |
+| Log app | `docker compose logs -f --tail=100 app` |
+| Log worker/scheduler | `docker compose logs --tail=50 worker` · `--tail=50 scheduler` |
+| Retry queue gagal | `docker compose run --rm app php artisan queue:retry all` |
+| Disk & cert | `df -h` · Uptime Kuma cert expiry · `certbot renew --dry-run` |
+
+---
+
+## 13. Phase 10 — Update & rollback
 
 ```bash
-# Update (urutan aman)
+# ---- Update (urutan aman) ----
 cd /srv/school-finance
 git pull
 docker run --rm -v /srv/school-finance:/app -w /app/web node:20-alpine sh -c 'npm ci && npm run build'
-./deploy/backup.sh                               # backup SEBELUM migrate
+./deploy/backup.sh                                   # backup SEBELUM migrate
 docker compose run --rm app php artisan migrate --force
 docker compose up -d --build
 curl -fsS https://<DOMAIN>/healthz | jq .
-```
 
-```bash
-# Rollback (image build lokal): pin source ke tag sebelumnya
+# ---- Rollback (image build lokal) ----
 git fetch --tags && git checkout <tag-sebelumnya>
 docker compose up -d --build
+
+# ---- Rollback (image GHCR pinned — opsi CI) ----
+# .env: APP_IMAGE_TAG=sha-<pref>  GITHUB_REPOSITORY=fayzisme/keuangan-sekolah
+docker compose pull app worker scheduler
+docker compose up -d
 ```
 
-> Jalur CI alternatif: set `APP_IMAGE_TAG=sha-<short>` + `GITHUB_REPOSITORY=fayzisme/keuangan-sekolah` di `.env` → `docker compose pull app worker scheduler` memakai image CI dari GHCR (immutable; rollback cukup ganti tag lalu `up -d`).
+---
+
+## 14. Troubleshooting (error → fix)
+
+| Symptom | Root cause | Fix |
+|---|---|---|
+| `docker compose up` gagal pull `ghcr.io/owner/repo-app` | Image belum di-push GHCR (no CI) | `docker compose build app` local, atau set `GITHUB_REPOSITORY` + tag |
+| `/healthz` 500 `Target class [files] does not exist` | `config/app.php` men-set `'providers' => []` (masalah lama, fixed di commit `22ab455`) | update repo + rebuild |
+| `composer install` gagal `ext-gd` | PHP stage vendor ≠ runtime ext | Dockerfile sudah fix (stage vendor `php:8.4-cli` + ext gd), rebuild |
+| `Pest: test directory tests/Unit not found` | `tests/Unit` kosong hilang dari git | fixed commit `e25a244` (.gitkeep), pull latest |
+| 401 login loop | Sanctum stateful cookie domain `/ SANCTUM_STATEFUL_DOMAINS` | cek `.env` value |
+| Migrate hang | Postgres belum healthy | `docker compose up -d postgres` → `docker compose ps` wait healthy |
+| PHP fatal `---> Target class [files]` saat artisan | `config/app.php` providers key | sure `config/app.php` bersih (no `providers` key) |
+| Backup `pg_dump` fail | Postgres down ATAU password env | `docker compose ps`; `source .env` sebelum script |
+| SSL cert not validate | DNS belum propagar / webroot challenge | cek `dig <DOMAIN>`; certbot webroot path abso |
 
 ---
 
-## 10. Monitoring & operasional
+## 15. Checklist keamanan (final)
 
-| Keperluan | Perintah / Alat |
+- [ ] `sudo ufw status` — alleen 22/80/443
+- [ ] SSH key-only + root login off — `ssh deploy@43.173.7.25` vanaf laptop/agent
+- [ ] `sudo fail2ban-client status sshd` — active
+- [ ] `.env` perm `600`, niet in git (`git ls-files | grep -c .env` = 1 (.env.example))
+- [ ] `docker compose ps` — geen `0.0.0.0:5432` / `0.0.0.0:6379` (DB/Redis internal)
+- [ ] Backup harian jalan + restore test gedaan
+- [ ] healthz monitor aktief (Uptime Kuma)
+- [ ] HSTS active (na HTTPS stabil)
+- [ ] `.env` APP_DEBUG=false
+
+---
+
+## 16. As-Built Record (diisi setelah deploy)
+
+| Item | Value |
 |---|---|
-| Health | `curl -s https://<DOMAIN>/healthz` → Uptime Kuma / UptimeRobot (interval 5 menit) |
-| Log aplikasi | `docker compose logs -f --tail=100 app` |
-| Worker queue | `docker compose logs --tail=50 worker` |
-| Scheduler | `docker compose logs --tail=50 scheduler` |
-| Disk & sertifikat | `df -h` · Uptime Kuma (cert expiry) |
-| Retry job gagal | `docker compose run --rm app php artisan queue:retry all` |
+| Tanggal deploy | |
+| Domain live | |
+| Commit hash (code) | |
+| Image tag build | |
+| APP_IMAGE_TAG (rollback pin) | |
+| VPS IP | `43.173.7.25` |
+| OS | Ubuntu 24.04 LTS |
+| Pilot school name/id | |
+| Backup cron | `0 19 * * *` (02:00 WIB) |
+| Backup test restore | |
+| Monitor (Uptime Kuma URL) | |
+| Revoke list benchmark | |
 
 ---
 
-## 11. Checklist keamanan (final)
-
-- [ ] UFW hanya 22/80/443 — cek `sudo ufw status`
-- [ ] SSH key-only, root login mati — `ssh deploy@43.173.7.25` dari laptop
-- [ ] fail2ban aktif — `sudo fail2ban-client status sshd`
-- [ ] `.env` permission `600`, tidak ada di git
-- [ ] DB/Redis internal Docker network (tanpa port host) — `docker compose ps` tidak memuat `0.0.0.0:5432`
-- [ ] Backup harian jalan + uji restore sudah dilakukan
-- [ ] Health monitor aktif
-- [ ] (Fast-follow, setelahnya) Midtrans + notifikasi WA: isi `MIDTRANS_*`/`TELEGRAM_*` di `.env` — lihat ADR-0015/0016
-
----
-
-## 12. Catatan versi deploy ini (commit `59334ba`)
-
-- CI `backend` (composer→pint→migrate→pest 251 assertions), `frontend`, `build-image` — **hijau**.
-- Job `deploy` CI sengaja nonaktif sampai Secret `PROD_*` diisi; jalur manual runbook ini tidak butuh secret tersebut.
-- PHP 8.4 (image `php:8.4-fpm-bookworm`), Postgres 16, Redis 7.
+*End of RUNBOOK v2.0 — dokumentasi lengkap deploy manual VPS. Opsi CI (Phase 10 rollback GHCR) memakai .github/workflows/ci.yml job `deploy` (secrets `PROD_HOST/PROD_USER/PROD_SSH_KEY/PROD_DOMAIN`).*
