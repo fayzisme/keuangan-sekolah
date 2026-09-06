@@ -347,19 +347,47 @@ docker compose up -d
 
 | Item | Value |
 |---|---|
-| Tanggal deploy | |
-| Domain live | |
-| Commit hash (code) | |
-| Image tag build | |
-| APP_IMAGE_TAG (rollback pin) | |
-| VPS IP | `43.173.7.25` |
-| OS | Ubuntu 24.04 LTS |
-| Pilot school name/id | |
+| Tanggal deploy | 2026-09-06 (pilot) |
+| Domain live | (belum — port alternatif pilot) |
+| Commit hash (code) | `050e810` (RUNBOOK v2.0) |
+| Image tag build | `school-app:pilot`, `school-nginx:pilot` |
+| VPS IP | `43.173.7.25` (host sandbox/Docker) |
+| OS | Ubuntu (host) — VM-3-246-ubuntu |
+| Pilot school name/id | SMA Pilot Test / id 1 |
+| Admin pilot | `admin@pilot.test` |
+| Verifier pilot | `verifier@bank.test` (bendahara) |
 | Backup cron | `0 19 * * *` (02:00 WIB) |
-| Backup test restore | |
-| Monitor (Uptime Kuma URL) | |
-| Revoke list benchmark | |
+| Monitor | belum |
+
+## 17. Verifikasi Live Pilot (2026-09-06)
+
+Stack pilot: `school-pg` (Postgres 16) · `school-redis` (Redis 7) · `app` (php-fpm 8.4) · `school-nginx` (port 8082 host). Semua flow terverifikasi HTTP dari host bridge `172.17.0.1:8082`:
+
+| Check | Hasil |
+|---|---|
+| `GET /healthz` | `{"status":"ok","checks":{"app":"ok","database":"ok","cache":"ok"}}` |
+| `GET /api/v1/ping` | `{"status":"ok","message":"School Finance API v1 siap."}` |
+| SPA `/` | HTTP 200 |
+| Onboarding `POST /platform/schools` (X-Platform-Key) | 201, school id 1 + admin id 1 |
+| Login + `/me` | token Sanctum, roles `[admin]`, active_school id 1 |
+| CRUD master data | academic year, class, bill-types (monthly/one_time), students, guardian + attach primary |
+| Generate invoice | SPP Sept 2026 (2x 150k) + Uang Pangkal (2x 2,5jt) = 4 invoice OPEN |
+| Payment manual (Idempotency-Key) | PENDING_VERIFICATION, `CASH-…` trx id |
+| Maker-checker verify | maker (admin) ≠ checker (bendahara) → SETTLED; invoice 1 → `PAID` |
+| Report student | total 2.650.000, dibayar 150.000, sisa 2.500.000 |
+| Export PDF/Excel/CSV | student.pdf `%PDF-`, arrears.pdf `%PDF-`, arrears.xlsx `PK`, arrears.csv (baris NIS benar) |
+| RBAC isolation | bendahara `POST /students` → 403 (write = admin) |
+
+### Catatan adaptasi pilot (berbeda dari prod normal)
+
+1. **Port alternatif** — 80/443 host dipakai layanan lain (nginx + Netdata). Pilot di `:8082` melalui image nginx baked (`web/dist` + config di-copy ke image, bukan volume — bind-mount rusak di sandbox).
+2. **App container bernama `app`** — nginx default.conf meng-upstream `app:9000`; nama harus persis.
+3. **Config/bake** — storage via volume `app_storage`; env via `-e` (bukan file `.env` volume).
+4. **Verifier user** dibentuk via SQL bootstrap (bukan endpoint) — alur pilot; di produksi, tambah user via API/CRUD.
+5. `.env` prod (`APP_KEY`, `DB_PASSWORD`, `PLATFORM_KEY`, `REDIS_PASSWORD`) dipuasakan dengan `-e` per container.
+
+Rollback pilot: `docker rm -f school-nginx app school-redis school-pg && docker volume rm school_pgdata school_redisdata` + `docker network rm school-net`.
 
 ---
 
-*End of RUNBOOK v2.0 — dokumentasi lengkap deploy manual VPS. Opsi CI (Phase 10 rollback GHCR) memakai .github/workflows/ci.yml job `deploy` (secrets `PROD_HOST/PROD_USER/PROD_SSH_KEY/PROD_DOMAIN`).*
+*End of RUNBOOK v2.0 — dokumentasi lengkap deploy manual VPS + verifikasi live pilot. Opsi CI (Phase 10 rollback GHCR) memakai .github/workflows/ci.yml job `deploy` (secrets `PROD_HOST/PROD_USER/PROD_SSH_KEY/PROD_DOMAIN`).*
