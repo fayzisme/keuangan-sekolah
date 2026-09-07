@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\OnboardController;
 use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\StudentController;
+use App\Http\Controllers\Api\UserController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/ping', function () {
@@ -36,6 +37,15 @@ Route::prefix('auth')->group(function () {
     // Endpoint yang membutuhkan konteks sekolah aktif + RBAC.
     Route::middleware(['auth:sanctum', 'school.context'])->group(function () {
         Route::get('/users', [AuthController::class, 'users'])->middleware('role:admin|bendahara');
+
+        // Beheer gebruikers (CRUD) — admin only.
+        // Aturan bisnis: admin kan 'ruim' data van gebruikers (baak/baca/update/hapus),
+        // maar MAG zijn eigen account niet verwijderen (geguard in UserController::destroy).
+        Route::middleware('role:admin')->group(function () {
+            Route::post('/users', [UserController::class, 'store']);
+            Route::put('/users/{id}', [UserController::class, 'update'])->whereNumber('id');
+            Route::delete('/users/{id}', [UserController::class, 'destroy'])->whereNumber('id');
+        });
     });
 });
 

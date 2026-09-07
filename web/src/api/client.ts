@@ -66,6 +66,46 @@ export async function usersApi(token: string) {
   return res.json();
 }
 
+export type SchoolUser = {
+  id: number;
+  name: string;
+  email: string;
+  roles: string[];
+};
+
+export type UserPayload = {
+  name: string;
+  email: string;
+  password?: string;
+  roles: string[];
+};
+
+export async function createUserApi(token: string, payload: UserPayload): Promise<SchoolUser> {
+  return authJson('/api/v1/auth/users', token, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateUserApi(token: string, id: number, payload: Partial<UserPayload>): Promise<SchoolUser> {
+  return authJson(`/api/v1/auth/users/${id}`, token, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteUserApi(token: string, id: number): Promise<void> {
+  const res = await fetch(`/api/v1/auth/users/${id}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+  });
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.message || `Hapus gagal: ${res.status}`);
+  }
+}
+
 // ---------------------------------------------------------------- types
 
 export type AcademicYear = {
