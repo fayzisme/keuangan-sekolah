@@ -42,15 +42,15 @@ export function PaymentsPage() {
     const invoice = openInvoices.find((i) => String(i.id) === selInvoice);
     const cents = Math.round(Number(amount) * 100);
     if (!invoice) {
-      setFormError('Kies invoice OPEN eerst.');
+      setFormError('Pilih tagihan OPEN terlebih dahulu.');
       return;
     }
     if (!Number.isFinite(cents) || cents <= 0) {
-      setFormError('Vul bedrag (in Rupiah) correct in.');
+      setFormError('Masukkan jumlah (dalam Rupiah) dengan benar.');
       return;
     }
     if (cents > invoice.amount_cents) {
-      setFormError(`Bedrag melebihi sisa invoice (${formatMoney(invoice.amount_cents)}).`);
+      setFormError(`Jumlah melebihi sisa tagihan (${formatMoney(invoice.amount_cents)}).`);
       return;
     }
     setBusy(true);
@@ -60,13 +60,13 @@ export function PaymentsPage() {
         cashier_name: cashier || undefined,
         idempotency_key: newIdempotencyKey(),
       });
-      setNotice(`✓ Payment #${created.id} gecreeerd (${created.status}) — wacht op verificatie door ander gebruiker.`);
+      setNotice(`✓ Pembayaran #${created.id} dibuat (${created.status}) — menunggu verifikasi oleh pengguna lain.`);
       setSelInvoice('');
       setAmount('');
       setCashier('');
       load();
     } catch (err) {
-      setFormError(err instanceof Error ? err.message : 'Record pembayaran gagal.');
+      setFormError(err instanceof Error ? err.message : 'Catat pembayaran gagal.');
     } finally {
       setBusy(false);
     }
@@ -77,10 +77,10 @@ export function PaymentsPage() {
     setNotice('');
     try {
       const done = await paymentVerifyApi(token ?? '', id);
-      setNotice(`✓ Payment #${done.id} geverifieerd → ${done.status}`);
+      setNotice(`✓ Pembayaran #${done.id} terverifikasi → ${done.status}`);
       load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Verificatie gagal.');
+      setError(err instanceof Error ? err.message : 'Verifikasi gagal.');
     }
   };
 
@@ -88,21 +88,24 @@ export function PaymentsPage() {
     <>
       <div className="page-head">
         <h2>Pembayaran</h2>
-        <p>Record pembayaran manual + maker-checker verificatie (admin ≠ bendahara).</p>
+        <p>Catat pembayaran manual + verifikasi maker-checker (admin ≠ bendahara).</p>
       </div>
 
       {error && <Alert tone="error">{error}</Alert>}
 
       <div className="grid-2" style={{ marginTop: '1.25rem' }}>
-        <Card title="Record Pembayaran Manual" sub="Alocoer bedrag naar invoice OPEN (idempotent via Idempotency-Key)">
+        <Card
+          title="Catat Pembayaran Manual"
+          sub="Alokasikan jumlah ke tagihan OPEN (idempotent via Idempotency-Key)"
+        >
           {formError && <Alert tone="error">{formError}</Alert>}
           {notice && <Alert tone="success">{notice}</Alert>}
           <form onSubmit={handleRecord} style={{ display: 'flex', flexDirection: 'column', gap: '0.9rem', marginTop: '0.5rem' }}>
             <div className="form-grid">
               <div className="field">
-                <label htmlFor="p-inv">Invoice</label>
+                <label htmlFor="p-inv">Tagihan</label>
                 <select id="p-inv" className="select" value={selInvoice} onChange={(e) => setSelInvoice(e.target.value)}>
-                  <option value="">— kies invoice OPEN —</option>
+                  <option value="">— pilih tagihan OPEN —</option>
                   {openInvoices.map((i) => (
                     <option key={i.id} value={i.id}>
                       #{i.id} {i.student?.name ?? ''} · {formatMoney(i.amount_cents)} ({i.status})
@@ -111,32 +114,32 @@ export function PaymentsPage() {
                 </select>
               </div>
               <div className="field">
-                <label htmlFor="p-amount">Bedrag (Rupiah)</label>
+                <label htmlFor="p-amount">Jumlah (Rupiah)</label>
                 <input id="p-amount" className="input" type="number" min={1} step={100} placeholder="mis. 150000" value={amount} onChange={(e) => setAmount(e.target.value)} />
               </div>
               <div className="field">
-                <label htmlFor="p-cashier">Cashier Naam</label>
-                <input id="p-cashier" className="input" type="text" placeholder="optioneel" value={cashier} onChange={(e) => setCashier(e.target.value)} />
+                <label htmlFor="p-cashier">Nama Kasir</label>
+                <input id="p-cashier" className="input" type="text" placeholder="opsional" value={cashier} onChange={(e) => setCashier(e.target.value)} />
               </div>
             </div>
             <button className="btn btn-primary" disabled={busy || !selInvoice}>
-              {busy ? 'Recording...' : 'Record Pembayaran (PENDING)'}
+              {busy ? 'Merekam...' : 'Catat Pembayaran (PENDING)'}
             </button>
           </form>
         </Card>
 
-        <Card title="Transacties" sub={`${payments.length} pembayaran opgeslagen`}>
+        <Card title="Transaksi" sub={`${payments.length} pembayaran tercatat`}>
           <div className="table-scroll">
             <table className="table">
               <thead>
                 <tr>
                   <th>#</th>
-                  <th>Method</th>
+                  <th>Metode</th>
                   <th className="right">Total</th>
                   <th>Status</th>
-                  <th>Gecreeerd door</th>
-                  <th>Geverifieerd door</th>
-                  <th>Datum</th>
+                  <th>Dibuat oleh</th>
+                  <th>Diverifikasi oleh</th>
+                  <th>Tanggal</th>
                   <th>Aksi</th>
                 </tr>
               </thead>
@@ -153,7 +156,7 @@ export function PaymentsPage() {
                     <td>{formatDate(p.created_at)}</td>
                     <td>
                       {p.status === 'PENDING_VERIFICATION' && p.created_by !== user?.id && (
-                        <button className="btn btn-ghost" onClick={() => handleVerify(p.id)}>Verify</button>
+                        <button className="btn btn-ghost" onClick={() => handleVerify(p.id)}>Verifikasi</button>
                       )}
                     </td>
                   </tr>

@@ -57,30 +57,30 @@ export function ReportsPage() {
     <>
       <div className="page-head">
         <h2>Laporan</h2>
-        <p>Rapport tunggakan per murid, filterbaar en eksportable naar PDF/Excel/CSV.</p>
+        <p>Laporan tunggakan per murid, bisa filter + ekspor ke PDF/Excel/CSV.</p>
       </div>
 
-      <Card title="Rapport Tunggakan" sub="Filter per klasse, jaar ajaran, of tipe tagihan" style={{ marginTop: '1.25rem' }}>
+      <Card title="Laporan Tunggakan" sub="Filter berdasarkan kelas, tahun ajaran, atau tipe tagihan" style={{ marginTop: '1.25rem' }}>
         {error && <Alert tone="error">{error}</Alert>}
         <div className="form-grid" style={{ marginBottom: '0.75rem' }}>
           <div className="field">
-            <label htmlFor="r-class">Klasse</label>
+            <label htmlFor="r-class">Kelas</label>
             <select id="r-class" className="select" value={classId} onChange={(e) => setClassId(e.target.value)}>
-              <option value="">Alle klasse</option>
+              <option value="">Semua kelas</option>
               {classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </div>
           <div className="field">
             <label htmlFor="r-year">Tahun Ajaran</label>
             <select id="r-year" className="select" value={yearId} onChange={(e) => setYearId(e.target.value)}>
-              <option value="">Alle jaar</option>
+              <option value="">Semua tahun</option>
               {years.map((y) => <option key={y.id} value={y.id}>{y.name} {y.semester}</option>)}
             </select>
           </div>
           <div className="field">
             <label htmlFor="r-bt">Tipe Tagihan</label>
             <select id="r-bt" className="select" value={billTypeId} onChange={(e) => setBillTypeId(e.target.value)}>
-              <option value="">Alle tipe</option>
+              <option value="">Semua tipe</option>
               {billTypes.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
             </select>
           </div>
@@ -88,13 +88,13 @@ export function ReportsPage() {
 
         <div className="row" style={{ marginBottom: '0.9rem' }}>
           <button className="btn btn-primary" onClick={() => handleExport('pdf', exportUrls.arrearsPdf)} disabled={busyExport !== ''}>
-            {busyExport === 'pdf' ? 'Generating...' : 'Export PDF'}
+            {busyExport === 'pdf' ? 'Ekspor...' : 'Ekspor PDF'}
           </button>
           <button className="btn btn-ghost" onClick={() => handleExport('excel', exportUrls.arrearsExcel)} disabled={busyExport !== ''}>
-            {busyExport === 'excel' ? 'Generating...' : 'Export Excel'}
+            {busyExport === 'excel' ? 'Ekspor...' : 'Ekspor Excel'}
           </button>
           <button className="btn btn-ghost" onClick={() => handleExport('csv', exportUrls.arrearsCsv)} disabled={busyExport !== ''}>
-            {busyExport === 'csv' ? 'Generating...' : 'Export CSV'}
+            {busyExport === 'csv' ? 'Ekspor...' : 'Ekspor CSV'}
           </button>
         </div>
 
@@ -103,8 +103,8 @@ export function ReportsPage() {
             <thead>
               <tr>
                 <th>NIS</th>
-                <th>Naam</th>
-                <th>Klasse</th>
+                <th>Nama</th>
+                <th>Kelas</th>
                 <th>Tipe</th>
                 <th>Periode</th>
                 <th className="right">Tagihan</th>
@@ -113,7 +113,7 @@ export function ReportsPage() {
               </tr>
             </thead>
             <tbody>
-              {rows.length === 0 && EmptyRow(8, 'Belum ada tunggakan voor deze filter.')}
+              {rows.length === 0 && EmptyRow(8, 'Belum ada tunggakan untuk filter ini.')}
               {rows.map((r) => (
                 <tr key={`${r.nis}-${r.periode}-${r.bill_type}`}>
                   <td>{r.nis}</td>

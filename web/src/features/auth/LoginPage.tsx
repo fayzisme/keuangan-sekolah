@@ -22,7 +22,7 @@ export function LoginPage() {
       login(res.token, res.user, res.active_school, res.schools);
       navigate('/');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login gagal.');
+      setError(err instanceof Error ? err.message : 'Masuk gagal.');
     } finally {
       setLoading(false);
     }
@@ -31,8 +31,8 @@ export function LoginPage() {
   return (
     <div className="app-shell">
       <div className="hero-card" style={{ width: '100%', maxWidth: '400px' }}>
-        <p className="eyebrow">Authentication</p>
-        <h2>Login Sistem Keuangan</h2>
+        <p className="eyebrow">Autentikasi</p>
+        <h2>Masuk Sistem Keuangan</h2>
         {error && <div style={{ color: 'red', marginBottom: '1rem' }}>{error}</div>}
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           <div>
@@ -68,7 +68,7 @@ export function LoginPage() {
               cursor: 'pointer',
             }}
           >
-            {loading ? 'Logging in...' : 'Login'}
+            {loading ? 'Masuk...' : 'Masuk'}
           </button>
         </form>
       </div>

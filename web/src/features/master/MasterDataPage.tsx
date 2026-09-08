@@ -30,10 +30,10 @@ export function MasterDataPage() {
 
   return (
     <div className="hero-card" style={{ width: '100%' }}>
-      <p className="eyebrow">Master Data</p>
-      <h2>Tahun Ajaran & Murid</h2>
+      <p className="eyebrow">Data Master</p>
+      <h2>Tahun Ajaran &amp; Murid</h2>
 
-      {error && <div style={{ color: 'red', marginBottom: '1rem' }}>Error: {error}</div>}
+      {error && <div style={{ color: 'red', marginBottom: '1rem' }}>Gagal: {error}</div>}
 
       <h3 style={{ marginTop: '1.5rem' }}>Tahun Ajaran</h3>
       <ul>

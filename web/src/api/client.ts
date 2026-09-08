@@ -24,7 +24,7 @@ export async function loginApi(email: string, password: string) {
 
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
-    throw new Error(data.message || 'Login gagal.');
+    throw new Error(data.message || 'Masuk gagal.');
   }
 
   return res.json();
@@ -35,7 +35,7 @@ export async function fetchMeApi(token: string) {
     headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
   });
 
-  if (!res.ok) throw new Error('Unauthorized');
+  if (!res.ok) throw new Error('Tidak terautentikasi / sesi berakhir.');
   return res.json();
 }
 
@@ -53,7 +53,7 @@ export async function switchSchoolApi(token: string, schoolId: number) {
     body: JSON.stringify({ school_id: schoolId }),
   });
 
-  if (!res.ok) throw new Error('Gagal switch sekolah.');
+  if (!res.ok) throw new Error('Gagal berpindah sekolah.');
   return res.json();
 }
 
@@ -62,7 +62,7 @@ export async function usersApi(token: string) {
     headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
   });
 
-  if (!res.ok) throw new Error('403 Forbidden / Akses Ditolak');
+  if (!res.ok) throw new Error('Akses ditolak (403).');
   return res.json();
 }
 

@@ -225,7 +225,7 @@ export function UsersPage() {
         ) : (
           <Card title="Akses Dibatasi" sub="Hanya Admin yang dapat mengelola pengguna">
             <p className="muted" style={{ margin: 0 }}>
-              Peran Anda saat ini tidak memiliki izin untuk menambah, mengubah, atau menghapus pengguna.
+              Peran Anda saat ini tidak memiliki izin untuk tambah, ubah, atau hapus pengguna.
             </p>
           </Card>
         )}
@@ -268,7 +268,7 @@ export function UsersPage() {
                         <td>
                           <div style={{ display: 'flex', gap: '0.35rem' }}>
                             <button className="btn btn-ghost" style={{ padding: '0.25rem 0.55rem', fontSize: '0.78rem' }} onClick={() => startEdit(u)}>
-                              Edit
+                              Ubah
                             </button>
                             <button
                               className="btn btn-danger"

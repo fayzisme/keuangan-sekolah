@@ -14,10 +14,12 @@ function buildWeekSeries(payments: Payment[]): WeekPoint[] {
     const d = new Date();
     d.setHours(0, 0, 0, 0);
     d.setDate(d.getDate() - i);
-    days.push({ key: d.toISOString().slice(0, 10), label: new Intl.DateTimeFormat('id-ID', { weekday: 'short' }).format(d), total: 0 });
+    days.push({
+      key: d.toISOString().slice(0, 10),
+      label: new Intl.DateTimeFormat('id-ID', { weekday: 'short' }).format(d),
+      total: 0,
+    });
   }
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
   const start = new Date(days[0].key + 'T00:00:00Z');
   for (const p of payments) {
     if (p.status !== 'SETTLED' || !p.created_at) continue;
@@ -47,7 +49,7 @@ export function DashboardPage() {
         setStudents(stu.data);
         setArrears(Array.isArray(arr.data) ? arr.data : []);
       })
-      .catch((err) => setError(err instanceof Error ? err.message : 'Gagal memuat dashboard.'));
+      .catch((err) => setError(err instanceof Error ? err.message : 'Gagal memuat data dasbor.'));
   };
 
   useEffect(load, [token]);
@@ -64,22 +66,46 @@ export function DashboardPage() {
     <>
       <div className="page-head">
         <h2>Dashboard</h2>
-        <p>Ringkasan finansial sekolah — tagihan, pembayaran, dan tunggakan.</p>
+        <p>Ringkasan keuangan sekolah — tagihan, pembayaran, dan tunggakan.</p>
       </div>
 
       {error && <Alert tone="error">{error}</Alert>}
 
       <div className="stat-grid mt">
-        <StatCard label="Total Tagihan" value={formatMoney(totalBilled)} foot={`${invoices.length} invoice (${openCount} open) `} icon="📄" tone="a" />
-        <StatCard label="Dibayar (SETTLED)" value={formatMoney(totalPaid)} foot={`${payments.filter((p) => p.status === 'SETTLED').length} pembayaran`} icon="💵" tone="b" />
-        <StatCard label="Tunggakan" value={formatMoney(arrearsTotal)} foot={`${arrears.length} lijn tunggakan`} icon="⚠️" tone="c" />
-        <StatCard label="Murid" value={String(students.length)} foot="murid aktif" icon="👥" tone="d" />
+        <StatCard
+          label="Total Tagihan"
+          value={formatMoney(totalBilled)}
+          foot={`${invoices.length} tagihan (${openCount} terbuka)`}
+          icon="📄"
+          tone="a"
+        />
+        <StatCard
+          label="Total Terbayar"
+          value={formatMoney(totalPaid)}
+          foot={`${payments.filter((p) => p.status === 'SETTLED').length} transaksi lunas`}
+          icon="💵"
+          tone="b"
+        />
+        <StatCard
+          label="Total Tunggakan"
+          value={formatMoney(arrearsTotal)}
+          foot={`${arrears.length} baris tunggakan`}
+          icon="⚠️"
+          tone="c"
+        />
+        <StatCard
+          label="Total Murid"
+          value={String(students.length)}
+          foot="murid terdaftar"
+          icon="👥"
+          tone="d"
+        />
       </div>
 
       <div className="grid-2">
-        <Card title="Koleksi 7 Hari Terakhir" sub="Total pembayaran SETTLED per hari (7 hari)">
+        <Card title="Penerimaan 7 Hari Terakhir" sub="Total pembayaran lunas per hari">
           {payments.length === 0 ? (
-            <p className="muted">Belum ada pembayaran untuk chart.</p>
+            <p className="muted">Belum ada data pembayaran untuk ditampilkan.</p>
           ) : (
             <div className="bar-chart">
               {week.map((w) => (
@@ -94,16 +120,16 @@ export function DashboardPage() {
           )}
         </Card>
 
-        <Card title="Aksi Hızla" sub="Atajos ke funksionalitas kunci">
+        <Card title="Akses Cepat" sub="Pintas ke fungsi utama sistem">
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
             <Link className="btn btn-primary" to="/invoices" style={{ width: '100%' }}>
-              Generate Tagihan
+              Buat Tagihan Baru
             </Link>
             <Link className="btn btn-ghost" to="/payments" style={{ width: '100%' }}>
-              Record Pembayaran Manual
+              Catat Pembayaran Manual
             </Link>
             <Link className="btn btn-ghost" to="/reports" style={{ width: '100%' }}>
-              Laporan & Ekspor (PDF/Excel/CSV)
+              Laporan &amp; Ekspor (PDF/Excel/CSV)
             </Link>
           </div>
         </Card>
@@ -112,23 +138,23 @@ export function DashboardPage() {
       <section className="card" style={{ marginTop: '1.5rem', padding: 0, overflow: 'hidden' }}>
         <header style={{ padding: '1rem 1.4rem' }}>
           <h3 className="card-title">Tagihan Terbaru</h3>
-          <p className="card-sub">6 invoice terakhir</p>
+          <p className="card-sub">6 tagihan terakhir yang dibuat</p>
         </header>
         <div className="table-scroll">
           <table className="table">
             <thead>
               <tr>
                 <th>#</th>
-                <th>Murid</th>
+                <th>Nama Murid</th>
                 <th>Tipe Tagihan</th>
                 <th>Periode</th>
                 <th className="right">Jumlah</th>
                 <th>Status</th>
-                <th>Batas</th>
+                <th>Batas Pembayaran</th>
               </tr>
             </thead>
             <tbody>
-              {recent.length === 0 && EmptyRow(7, 'Belum ada invoice. Generate di halaman Tagihan.')}
+              {recent.length === 0 && EmptyRow(7, 'Belum ada tagihan. Buat di halaman Tagihan.')}
               {recent.map((inv) => (
                 <tr key={inv.id}>
                   <td>{inv.id}</td>
@@ -136,7 +162,11 @@ export function DashboardPage() {
                   <td>{inv.bill_type?.name ?? '—'}</td>
                   <td>{inv.periode_bulan ? `${inv.periode_bulan}/${inv.periode_tahun}` : String(inv.periode_tahun)}</td>
                   <td className="right strong">{formatMoney(inv.amount_cents)}</td>
-                  <td><Badge tone={invoiceTone(inv.status ?? '')}>{inv.status}</Badge></td>
+                  <td>
+                    <Badge tone={invoiceTone(inv.status ?? '')}>
+                      {inv.status === 'OPEN' ? 'Terbuka' : inv.status === 'PAID' ? 'Lunas' : inv.status === 'VOID' ? 'Batal' : inv.status}
+                    </Badge>
+                  </td>
                   <td>{formatDate(inv.due_at)}</td>
                 </tr>
               ))}

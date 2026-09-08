@@ -84,20 +84,20 @@ export function App() {
 
         <div className="nav-item" onClick={handleLogout} style={{ marginTop: '1.25rem', color: 'rgba(255,255,255,0.6)' }}>
           {Icon('logout')}
-          <span>Logout</span>
+          <span>Keluar</span>
         </div>
       </aside>
 
       <div className="main-wrap">
         <header className="topbar">
-          <div className="topbar-title">School Finance</div>
+          <div className="topbar-title">Keuangan Sekolah</div>
           <div className="topbar-right">
             <span className="school-chip">{activeSchool?.name ?? 'Sekolah'}</span>
             <div className="user-chip">
               <span className="user-avatar">{user ? initials(user.name) : '?'}</span>
               <div className="user-meta">
                 <strong>{user?.name ?? '—'}</strong>
-                <small>{roles.join(', ') || 'geen peran'}</small>
+                <small>{roles.join(', ') || 'tanpa peran'}</small>
               </div>
             </div>
           </div>

@@ -37,7 +37,7 @@ export function StudentsPage() {
     setFormError('');
     setNotice('');
     if (!nis.trim() || !name.trim()) {
-      setFormError('NIS en Naam wajib.');
+      setFormError('NIS dan Nama wajib.');
       return;
     }
     setBusy(true);
@@ -49,7 +49,7 @@ export function StudentsPage() {
         class_id: classId ? Number(classId) : undefined,
         birth_date: birthDate || undefined,
       });
-      setNotice(`✓ Murid aangemeld${res.student ? ` (${res.student.name})` : ''}.`);
+      setNotice(`✓ Murid terdaftar${res.student ? ` (${res.student.name})` : ''}.`);
       setNis('');
       setName('');
       setGender('');
@@ -57,7 +57,7 @@ export function StudentsPage() {
       setBirthDate('');
       load();
     } catch (err) {
-      setFormError(err instanceof Error ? err.message : 'Aanmeld murid gagal.');
+      setFormError(err instanceof Error ? err.message : 'Rekam murid gagal.');
     } finally {
       setBusy(false);
     }
@@ -67,13 +67,13 @@ export function StudentsPage() {
     <>
       <div className="page-head">
         <h2>Murid</h2>
-        <p>Daftar murid + aanmeld baru (NIS uniek per sekolah).</p>
+        <p>Daftar murid + tambah murid baru (NIS unik per sekolah).</p>
       </div>
 
       {error && <Alert tone="error">{error}</Alert>}
 
       <div className="grid-2" style={{ marginTop: '1.25rem' }}>
-        <Card title="Aanmeld Murid" sub="NIS uniek; klasse optioneel">
+        <Card title="Tambah Murid" sub="NIS unik; kelas opsional">
           {formError && <Alert tone="error">{formError}</Alert>}
           {notice && <Alert tone="success">{notice}</Alert>}
           <form onSubmit={handleCreate} style={{ display: 'flex', flexDirection: 'column', gap: '0.9rem', marginTop: '0.5rem' }}>
@@ -83,51 +83,51 @@ export function StudentsPage() {
                 <input id="s-nis" className="input" type="text" maxLength={30} placeholder="mis. 2026001" value={nis} onChange={(e) => setNis(e.target.value)} />
               </div>
               <div className="field">
-                <label htmlFor="s-name">Naam</label>
+                <label htmlFor="s-name">Nama</label>
                 <input id="s-name" className="input" type="text" placeholder="Nama murid" value={name} onChange={(e) => setName(e.target.value)} />
               </div>
               <div className="field">
                 <label htmlFor="s-gender">Gender</label>
                 <select id="s-gender" className="select" value={gender} onChange={(e) => setGender(e.target.value)}>
-                  <option value="">— blanco —</option>
+                  <option value="">— kosong —</option>
                   <option value="L">Laki-laki</option>
-                  <option value="P">Perempaan</option>
+                  <option value="P">Perempuan</option>
                 </select>
               </div>
               <div className="field">
-                <label htmlFor="s-class">Klasse</label>
+                <label htmlFor="s-class">Kelas</label>
                 <select id="s-class" className="select" value={classId} onChange={(e) => setClassId(e.target.value)}>
-                  <option value="">— kies —</option>
+                  <option value="">— pilih —</option>
                   {classes.map((c) => (
                     <option key={c.id} value={c.id}>{c.name}</option>
                   ))}
                 </select>
               </div>
               <div className="field">
-                <label htmlFor="s-bd">Birth Date</label>
+                <label htmlFor="s-bd">Tanggal Lahir</label>
                 <input id="s-bd" className="input" type="date" value={birthDate} onChange={(e) => setBirthDate(e.target.value)} />
               </div>
             </div>
             <button className="btn btn-primary" disabled={busy}>
-              {busy ? 'Aanmeld...' : 'Aanmeld Murid'}
+              {busy ? 'Menyimpan...' : 'Tambah Murid'}
             </button>
           </form>
         </Card>
 
         <Card title="Daftar Murid" sub={`${students.length} murid`} actions={
-          <span className="badge badge-blue">{classes.length} klasse</span>
+          <span className="badge badge-blue">{classes.length} kelas</span>
         }>
           <div className="field" style={{ marginBottom: '0.75rem' }}>
-            <input className="input" type="search" placeholder="Zoek op NIS of naam..." value={search} onChange={(e) => setSearch(e.target.value)} />
+            <input className="input" type="search" placeholder="Cari berdasarkan NIS atau nama..." value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
           <div className="table-scroll">
             <table className="table">
               <thead>
                 <tr>
                   <th>NIS</th>
-                  <th>Naam</th>
+                  <th>Nama</th>
                   <th>Gender</th>
-                  <th>Klasse</th>
+                  <th>Kelas</th>
                   <th>Status</th>
                 </tr>
               </thead>
@@ -137,7 +137,7 @@ export function StudentsPage() {
                   <tr key={s.id}>
                     <td>{s.nis}</td>
                     <td className="strong">{s.name}</td>
-                    <td>{s.gender ?? '—'}</td>
+                    <td>{s.gender === 'L' ? 'Laki-laki' : s.gender === 'P' ? 'Perempuan' : '—'}</td>
                     <td>{classes.find((c) => c.id === s.class_id)?.name ?? '—'}</td>
                     <td><span className={`badge ${s.is_active ? 'badge-green' : 'badge-gray'}`}>{s.is_active ? 'Aktif' : 'Inaktif'}</span></td>
                   </tr>
