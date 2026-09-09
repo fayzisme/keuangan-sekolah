@@ -1,5 +1,7 @@
 # RUNBOOK — Deploy & Operasi VPS School Finance
 
+> Dokumen utama operasi. Untuk **langkah menaikkan pilot → produksi penuh** (domain, SSH, HTTPS, GHCR, CI/CD otomatis, worker/scheduler) lihat **[`PRODUCTION.md`](PRODUCTION.md)** — runbook cutover pendamping dokumen ini.
+
 > **Versi:** 2.0 (Complete) · **Target:** VPS `43.173.7.25` · Ubuntu 24.04 LTS · 4vCPU/8GB (rekomendasi)
 > **Repo:** https://github.com/fayzisme/keuangan-sekolah (public, branch `main`)
 > **Stack:** nginx 1.27 · Laravel 12 php-fpm 8.4 · PostgreSQL 16 · Redis 7 · queue worker + scheduler
