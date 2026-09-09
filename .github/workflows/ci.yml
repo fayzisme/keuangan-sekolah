@@ -1,7 +1,10 @@
 # =====================================================================
 # CI/CD — GitHub Actions
-#   PR:   lint + test (Postgres/Redis nyata) + audit => gerbang keamanan
-#   main: + build image immutabel -> push GHCR -> deploy ke VPS (SSH)
+#   PR:   lint + test (Postgres/Redis nyata) => gerbang keamanan
+#   main: + build image immutabel (app + nginx) -> push GHCR
+#         -> deploy ke VPS (SSH)
+#
+# Rujukan: deploy/PRODUCTION.md — Fase E (sambungkan CI/CD).
 # =====================================================================
 name: CI/CD
 
@@ -108,7 +111,7 @@ jobs:
           name: web-dist
           path: web/dist
 
-  # ------------------------- BUILD & PUSH IMAGE ------------------------
+  # ---------------- BUILD & PUSH IMAGE (app + nginx) -----------------
   build-image:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: [backend, frontend]
@@ -135,6 +138,12 @@ jobs:
         id: meta
         run: echo "tag=sha-$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
 
+      - name: Unduh artefak frontend (web/dist) untuk image nginx
+        uses: actions/download-artifact@v4
+        with:
+          name: web-dist
+          path: web/dist
+
       - name: Build & push app image
         uses: docker/build-push-action@v6
         with:
@@ -144,6 +153,18 @@ jobs:
           tags: |
             ghcr.io/${{ github.repository }}-app:${{ steps.meta.outputs.tag }}
             ghcr.io/${{ github.repository }}-app:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build & push nginx image (frontend SPA)
+        uses: docker/build-push-action@v6
+        with:
+          context: ./
+          file: deploy/Dockerfile.web
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}-nginx:${{ steps.meta.outputs.tag }}
+            ghcr.io/${{ github.repository }}-nginx:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -162,14 +183,20 @@ jobs:
           host: ${{ secrets.PROD_HOST }}
           username: ${{ secrets.PROD_USER }}
           key: ${{ secrets.PROD_SSH_KEY }}
+          envs: PROD_PATH,GITHUB_REPOSITORY,APP_IMAGE_TAG
           script: |
             set -e
-            cd /srv/school-finance
+            cd "${PROD_PATH:-/srv/school-finance}"
             ./deploy/backup.sh                       # backup sebelum migrate
-            export APP_IMAGE_TAG=${{ needs.build-image.outputs.tag }}
-            docker compose pull app worker scheduler
+            export APP_IMAGE_TAG="$APP_IMAGE_TAG"
+            export GITHUB_REPOSITORY="$GITHUB_REPOSITORY"
+            docker compose pull app worker scheduler nginx
             docker compose run --rm app php artisan migrate --force
             docker compose up -d
             sleep 10
             curl -fsS https://${{ secrets.PROD_DOMAIN }}/healthz \
-              && echo "✅ healthz OK"
+              && echo "OK: healthz"
+        env:
+          PROD_PATH: ${{ secrets.PROD_PATH }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          APP_IMAGE_TAG: ${{ needs.build-image.outputs.tag }}

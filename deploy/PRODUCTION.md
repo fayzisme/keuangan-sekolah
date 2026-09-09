@@ -159,9 +159,9 @@ Template sudah ada: `deploy/nginx/https.conf.example` (TLS 1.2+, HSTS, redirect 
 
 ## 7. Fase E — Sambungkan CI/CD (perubahan di repo)
 
-Saat ini `ci.yml` sudah punya 4 job (backend, frontend, build-image, deploy). Ada **3 celah** yang harus ditutup agar benar-benar men-deploy:
+Saat ini `ci.yml` sudah punya 4 job (backend, frontend, build-image, deploy). Tiga celah di bawah **sudah ditutup** di repo (lihat perubahan terakhir pada `ci.yml`, `docker-compose.yml`, dan `.env.example`):
 
-### 7.1. Build image frontend (nginx) ke GHCR
+### 7.1. Build image frontend (nginx) ke GHCR ✅
 `ci.yml` hanya membangun `-app`. Tambahkan rilis image nginx dari `deploy/Dockerfile.web`:
 
 ```yaml
@@ -178,27 +178,23 @@ Saat ini `ci.yml` sudah punya 4 job (backend, frontend, build-image, deploy). Ad
           cache-to: type=gha,mode=max
 ```
 
-### 7.2. Sinkronkan nama image di `docker-compose.yml`
-Compose memakai variabel `GITHUB_REPOSITORY` dan `APP_IMAGE_TAG` (baris 52, 70, 83) — sudah kompatibel. Pastikan `GITHUB_REPOSITORY` diatur saat deploy, mis. di workflow:
+### 7.2. Sinkronkan nama image di `docker-compose.yml` ✅
+Service `nginx` di compose sekarang memakai image GHCR (`ghcr.io/${GITHUB_REPOSITORY}-nginx:${APP_IMAGE_TAG}`), seragam dengan `app`/`worker`/`scheduler`. Variabel dikirim dari workflow deploy:
 ```yaml
       - name: Deploy via SSH
         env:
           GITHUB_REPOSITORY: ${{ github.repository }}
+          APP_IMAGE_TAG: ${{ needs.build-image.outputs.tag }}
 ```
-dan disisipkan ke perintah remote:
-```bash
-export GITHUB_REPOSITORY=fayzisme/keuangan-sekolah
-```
+`.env.example` juga sudah menyertakan `GITHUB_REPOSITORY` sebagai nilai default.
 
-### 7.3. Path server & port
-CI berasumsi repo di `/srv/school-finance`. Pilih salah satu:
-- **Opsi 1 (disarankan, sesuai RUNBOOK):** clone repo ke `/srv/school-finance` dan jalankan stack compose di sana (nginx langsung di 80/443). Pilot di `:8082` bisa dihentikan setelah produksi verified.
-- **Opsi 2 (tanpa pindah):** ubah baris `cd /srv/school-finance` → `cd /opt/data/school-finance-system` di step `deploy`, tapi ini menyimpang dari RUNBOOK dan kurang bersih untuk produksi.
+### 7.3. Path server & port ✅ (via secret opsional)
+Job deploy kini memakai `cd "${PROD_PATH:-/srv/school-finance}"`. Nilai default mengikuti RUNBOOK (`/srv/school-finance`); jika ingin tetap memakai `/opt/data/school-finance-system`, cukup set secret/var `PROD_PATH`. Port produksi tetap 80/443 (bukan 8082 pilot).
 
-### 7.4. Jalankan worker & scheduler
-Di compose sudah ada service `worker` & `scheduler` (butuh `QUEUE_CONNECTION=redis`). Saat cutover, pastikan keduanya ikut `up -d` dan `QUEUE_CONNECTION=redis`, `CACHE_STORE=redis`, `SESSION_DRIVER=redis` di `.env`.
+### 7.4. Jalankan worker & scheduler ⏳ (saat cutover)
+Service `worker` & `scheduler` sudah ada di compose (butuh `QUEUE_CONNECTION=redis`). Saat cutover produksi, pastikan keduanya ikut `up -d` dan `QUEUE_CONNECTION=redis`, `CACHE_STORE=redis`, `SESSION_DRIVER=redis` di `.env`.
 
-> Setelah ini, **push ke `main` otomatis**: tes → build image → push GHCR → SSH deploy → healthz.
+> ✅ Setelah celah ditutup, **push ke `main` otomatis**: tes → build image (app+nginx) → push GHCR → SSH deploy → healthz.
 
 ---
 
@@ -307,17 +303,17 @@ gunzip -c /var/backups/school-finance/school-<stamp>.sql.gz | \
 
 | Kebutuhan | Status |
 |---|---|
-| Pipeline CI `ci.yml` (backend, frontend, build-image, deploy) | ✅ ada, perlu penyesuaian §7 |
+| Pipeline CI `ci.yml` (backend, frontend, build-image app+nginx, deploy) | ✅ ada (celah §7 ditutup) |
 | Template HTTPS `deploy/nginx/https.conf.example` | ✅ ada |
 | Script backup `deploy/backup.sh` | ✅ ada |
 | Script bootstrap `deploy/bootstrap.sh` | ✅ ada |
-| Docker Compose lengkap (nginx, app, worker, scheduler, postgres, redis) | ✅ ada |
+| Docker Compose lengkap (nginx, app, worker, scheduler, postgres, redis) | ✅ ada, image GHCR |
 | Script deploy manual `deploy/deploy.sh` | ✅ ada |
 | **Domain + DNS** | ❌ perlu disediakan |
 | **SSH port 22 + user deploy + key** | ❌ perlu disediakan |
-| **GitHub secrets (4)** | ❌ perlu diisi |
-| Image `-nginx` di GHCR + path `/srv/school-finance` | ⏳ bisa dikerjakan asisten |
-| Sinkronisasi `ci.yml` dengan compose/GHCR | ⏳ bisa dikerjakan asisten |
+| **GitHub secrets (4 + opsional `PROD_PATH`)** | ❌ perlu diisi |
+| Image `-nginx` di GHCR | ✅ siap (otomatis di-push saat push `main` berikutnya) |
+| Path repo produksi (`/srv/school-finance` atau via `PROD_PATH`) | ⏳ keputusan pemilik saat cutover |
 
 ---
 
