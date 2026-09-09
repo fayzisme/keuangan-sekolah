@@ -313,6 +313,32 @@ docker compose up -d
 
 ---
 
+## 13b. Fast deploy — `deploy/deploy.sh` (satu perintah)
+
+Untuk update cepat pilot/production tanpa menghafal urutan build manual:
+
+```bash
+cd /opt/data/school-finance-system
+./deploy/deploy.sh                # rebuild API + UI, recreate containers
+./deploy/deploy.sh --skip-ui      # hanya image API
+./deploy/deploy.sh --skip-api     # hanya image UI (npm build tetap jalan bila ada)
+./deploy/deploy.sh --prune        # sekalian hapus image sha-tagged lama (>3/service)
+```
+
+Apa yang dilakukan script:
+
+1. **Sumber env** — pakai `.env` di root repo bila ada; tanpa itu, baca env dari container `app` yang live (aman: secret tidak pernah dicetak).
+2. **Build image API** — `docker build -t school-app:pilot -f app/Dockerfile .` (context = root repo, bukan folder `app/`).
+3. **Build frontend + image nginx** — `npm run build` → `web/dist`, lalu `docker build -f deploy/Dockerfile.web .`.
+4. **Recreate `app`** — env identik dengan nilai live; `--restart unless-stopped`.
+5. **Recreate `school-nginx`** — port host `8082->80`; `--restart unless-stopped`.
+6. **Health check** — polling `/healthz` maks 60 detik, lalu cetak status SPA + healthz.
+7. Setiap build diberi tag `:pilot-<short-sha>` sebagai cadangan rollback.
+
+> ⚠️ Script ini menghapus & membuat ulang container live. Jalankan hanya saat window maintenance kecil, dan pastikan `deploy/backup.sh` sudah jalan baru-baru ini.
+
+---
+
 ## 14. Troubleshooting (error → fix)
 
 | Symptom | Root cause | Fix |
@@ -391,3 +417,30 @@ Rollback pilot: `docker rm -f school-nginx app school-redis school-pg && docker 
 ---
 
 *End of RUNBOOK v2.0 — dokumentasi lengkap deploy manual VPS + verifikasi live pilot. Opsi CI (Phase 10 rollback GHCR) memakai .github/workflows/ci.yml job `deploy` (secrets `PROD_HOST/PROD_USER/PROD_SSH_KEY/PROD_DOMAIN`).*
+
+---
+
+## SECURITY — Insiden 2026-09-07 & Aturan Wajib
+
+> **Insiden:** container test `pg_test` (PostgreSQL, `-p 0.0.0.0:5433:5432`,
+> password `postgres/postgres`) + `redis_test` (Redis `-p 0.0.0.0:6379`, tanpa
+> password) ditinggalkan berjalan dan TERBUKA ke publik. Attacker masuk via
+> brute-force, eksekusi **PostgreSQL RCE** (`COPY ... PROGRAM` / UDF `system()`),
+> download payload dari `196.251.121.185`, tanam proses jahat `/tmp/postgresql`
+> yang menghabiskan CPU/RAM (load 4.93, RAM 92.8%). Container dihapus, IP C2
+> di-block, dan firewall Docker diperbaiki.
+
+**Aturan wajib saat deploy/membuat service:**
+
+1. **JANGAN publish DB/Redis ke `0.0.0.0`** — Docker-publish MELEWATI UFW
+   (via chain FORWARD/DOCKER, bukan INPUT). `0.0.0.0` = terbuka ke seluruh
+   internet. Gunakan network internal Docker (`networks:` tanpa `ports:`) atau
+   bind `127.0.0.1`.
+2. **Password kuat & unik** — `openssl rand -base64 24`, jangan default.
+3. **Hapus container test setelah dipakai**; jangan tinggalkan di host produksi.
+4. **Allowlist port publik:** `22, 80, 443, 8080, 8081, 8082, 19999, 20129`.
+   Selain itu → layanan baru lewat reverse proxy host nginx, bukan
+   `docker run -p` port baru (akan diblok firewall & ditandai watchdog).
+5. Referensi firewall: chain `WAN-GUARD` di `DOCKER-USER`
+   (`/usr/local/sbin/docker-ufw-guard.sh`), watchdog
+   `/usr/local/sbin/docker-port-watchdog.sh`.

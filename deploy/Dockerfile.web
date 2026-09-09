@@ -1,0 +1,14 @@
+# =====================================================================
+# Dockerfile.web — image frontend (nginx) untuk School Finance.
+# Sebelumnya Dockerfile ini ditulis ad-hoc di /tmp saat pilot;
+# sekarang di-versioning di repo agar deploy.sh bisa rebuild sendiri.
+#
+# Build context = ROOT REPO (bukan folder ini!):
+#   docker build -t school-nginx:pilot -f deploy/Dockerfile.web .
+# =====================================================================
+FROM nginx:1.27-alpine
+
+COPY deploy/nginx/default.conf /etc/nginx/conf.d/default.conf
+COPY web/dist /var/www/web
+
+EXPOSE 80
