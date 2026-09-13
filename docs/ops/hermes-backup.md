@@ -13,107 +13,100 @@ container, yang volatil):
 | `/opt/data` (`HERMES_HOME`) | subfolder/bind mount pada `/dev/vda2` | config, DB SQLite, sesi, memori, skills, logs, repo proyek |
 | `/app/workspace` | subfolder terpisah pada `/dev/vda2` | direktori kerja agent (salinan docs lama) |
 
-**Hal penting:** DB Hermes memakai SQLite **WAL** dan gateway **selalu menulis** (24/7).
-Backup naif `cp` bisa menghasilkan file yang tidak konsisten. Skrip kami memakai
-`sqlite3 .backup` yang aman walau database sedang aktif → **zero downtime**.
+### Desain keamanan backup (dua tahap)
+
+Backup dibagi menjadi **2 archive** dengan tingkat keamanan berbeda:
+
+| Archive | Isi | Perlakuan |
+|---|---|---|
+| `data.tar.gz` | memori, skills, plugins, logs, cron, gateway state, repo proyek | **Aman / plaintext** — tidak boleh berisi credential. Divervikasi secret-leak scan otomatis. |
+| `secrets.tar.gz.enc` | `config.yaml*`, `sessions/`, semua `*.db`, `.env*` | **Terenkripsi AES-256** (openssl + pbkdf2 200.000 iterasi). Hanya dibuat jika `ENCRYPTION_PASSWORD` diset. |
+
+**Prinsip:** credential (API key, token Discord, riwayat request yang memuat auth) **tidak pernah**
+berada dalam archive plaintext. Jika tidak ada password, maka item rahasia **tidak ikut di-backup**
+(skrip memberi peringatan jelas), bukan malah ikut dalam bentuk mentah.
+
+Ada **secret-leak scan otomatis**: setelah archive aman dibuat, skrip membongkar lalu memindainya
+dengan detektor presisi (pola `sk-*`, `ghp_*`, `AKIA*`, private key, `Authorization:`, `api_key=`,
+`x-*-key`). Jika ada jejak credential, backup **DITOLAK** (exit non-zero) — sehingga mustahil
+backup yang bocor lolos tanpa disadari.
 
 ## 2. Cara memakai skrip
 
-### A. Dari dalam container (paling mudah — langsung jalan)
+### A. Dari dalam container — backup aman (tanpa rahasia)
 
 ```bash
-# Jalankan default: simpan ke /opt/data/_backups/hermes-<timestamp>/
 bash /opt/data/school-finance-system/scripts/hermes-backup.sh
+# → data.tar.gz (41M) + NOTE: archive rahasia tidak ikut
+```
 
-# Simpan ke lokasi lain (misal mount NFS/ext4 eksternal) + tulis log
-BACKUP_ROOT=/mnt/backup/hermes KEEP=14 LOG_TO_FILE=1 \
+### B. Dari dalam container — backup LENGKAP (dengan enkripsi)
+
+```bash
+# Wajib: beri password enkripsi — via env var (disarankan):
+ENCRYPTION_PASSWORD='password-kuat-jangan-hilang' \
+  bash /opt/data/school-finance-system/scripts/hermes-backup.sh
+
+# Atau via file (aman untuk cron, file ber-mode 600):
+echo -n 'password-kuat-jangan-hilang' > /opt/data/.backup-pass
+chmod 600 /opt/data/.backup-pass
+ENCRYPTION_PASSWORD_FILE=/opt/data/.backup-pass \
   bash /opt/data/school-finance-system/scripts/hermes-backup.sh
 ```
 
-### B. Dari host VPS (tanpa masuk container)
+Variabel opsional lain: `BACKUP_ROOT`, `KEEP` (default 7), `LOG_TO_FILE=1`.
+
+### C. Otomatis via cron (disarankan — mode lengkap)
 
 ```bash
-# Asumsikan nama containernya hermes; cek dulu: sudo docker ps / ctr -n ... c ls
-sudo docker exec <container> bash /opt/data/school-finance-system/scripts/hermes-backup.sh
-
-# Atau backup langsung dari host (data = bind mount /opt/data di VPS):
-#   → jalankan skrip di dalam container agar SQLite .backup aman dipakai.
+# crontab VPS — setiap hari 03:00 WIB
+0 3 * * * /usr/bin/docker exec -e ENCRYPTION_PASSWORD_FILE=/opt/data/.backup-pass \
+  hermes bash /opt/data/school-finance-system/scripts/hermes-backup.sh >> /var/log/hermes-backup.log 2>&1
 ```
 
-### C. Otomatis via cron (disarankan)
+> Simpan password di file ber-mode `600`, jangan hardcode di crontab baris perintah
+> (bisa terlihat lewat `ps`). Jika password hilang, archive rahasia TIDAK bisa dibuka —
+> simpan salinannya di tempat aman terpisah (password manager).
 
-Tambahkan baris berikut ke crontab VPS (`crontab -e`) — backup tiap hari 03:00 WIB:
+## 3. Restore
 
-```
-0 3 * * * /usr/bin/docker exec hermes bash /opt/data/school-finance-system/scripts/hermes-backup.sh >> /var/log/hermes-backup.log 2>&1
-```
-
-> Atau dari dalam container pakai cron Hermes (job JSON di `/opt/data/cron/jobs.json`).
-
-## 3. Keamanan & enkripsi
-
-- **`.env` TIDAK ikut ter-archive** oleh skrip (di-exclude) karena berisi token Discord
-  dan API keys. Salinan `.env.bak` yang sudah ada di `/opt/data` tetap tersedia secara lokal.
-- Jika kamu **ingin** cadangan credential ikut ter-backup, **enkripsi dulu**:
+### Periksa isi backup
 
 ```bash
-# 1. tar data sensitif
-tar czf secrets.tar.gz -C /opt/data .env
-
-# 2. enkripsi dengan age (disarankan) — simpan key di tempat aman terpisah
-age -r age1... -o secrets.tar.gz.age secrets.tar.gz
-# atau gpg
-gpg --symmetric --cipher-algo AES256 secrets.tar.gz
-```
-
-- Untuk backup ke lokasi remote (VPS lain / object storage), upload + setelah upload
-  hapus salinan lokal, atau gunakan `restic` / `rclone` dengan enkripsi bawaan.
-
-## 4. Verifikasi & restore
-
-### Cek isi backup
-
-```bash
-ls -lh /opt/data/_backups/hermes-<timestamp>/
 tar tzf /opt/data/_backups/hermes-<timestamp>/data.tar.gz | head
+# archive rahasia harus di-decrypt dulu:
+openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -salt \
+  -pass 'pass:password-kuat-jangan-hilang' \
+  -in  /opt/data/_backups/hermes-<timestamp>/secrets.tar.gz.enc \
+  -out /tmp/secrets.tar.gz
+tar tzf /tmp/secrets.tar.gz
 ```
 
-Skrip sudah otomatis menjalankan `PRAGMA integrity_check` pada semua DB yang di-backup.
-
-### Simulasi restore (ke folder kosong)
+### Restore nyata (saat gateway BERHENTI)
 
 ```bash
-mkdir -p /tmp/restore-test
-tar xzf /opt/data/_backups/hermes-<timestamp>/data.tar.gz -C /tmp/restore-test
-# cek DB
-sqlite3 /tmp/restore-test/state.db "PRAGMA integrity_check;"
+# 1. Stop gateway dulu (hindari konflik tulis):
+#    hermes gateway stop   (atau touch /opt/data/gateway.lock + kill PID)
+
+# 2. Extraksi & salin balik (dari folder backup terbaru):
+B=/opt/data/_backups/hermes-<timestamp>
+tar xzf "$B/data.tar.gz" -C /opt/data
+openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -salt \
+  -pass 'pass:password-kuat-jangan-hilang' \
+  -in "$B/secrets.tar.gz.enc" -out /tmp/secrets.tar.gz
+tar xzf /tmp/secrets.tar.gz -C /opt/data
+
+# 3. Jalankan ulang gateway:
+#    hermes gateway run   (atau biarkan s6 yang me-restart)
 ```
 
-### Restore nyata (hanya saat diperlukan)
+## 4. Keamanan & checklist
 
-> ⚠️ Lakukan saat gateway **berhenti** untuk menghindari konflik tulis.
-> Simpan dulu data lama (jangan langsung ditimpa).
-
-```bash
-# 1. Stop gateway (dalam container)
-hermes gateway stop          # atau: touch /opt/data/gateway.lock + kill PID
-
-# 2. Salin balik DB & data
-cp /opt/data/_backups/hermes-<timestamp>/state.db /opt/data/state.db
-cp /opt/data/_backups/hermes-<timestamp>/projects.db /opt/data/projects.db
-# ...dst (sesuai item di backup)
-
-# 3. Extract archive lain
-tar xzf /opt/data/_backups/hermes-<timestamp>/data.tar.gz -C /opt/data
-
-# 4. Jalankan ulang gateway
-hermes gateway run           # atau biarkan s6 yang me-restart
-```
-
-## 5. Checklist operasional
-
-- [ ] Backup otomatis harian berjalan (cek `/var/log/hermes-backup.log` atau `_backups/`)
-- [ ] Setidaknya 1 backup berhasil diverifikasi (integrity check `ok`)
-- [ ] Restore pernah disimulasikan minimal sekali (lihat §4)
-- [ ] Key enkripsi disimpan terpisah dari server (jika gunakan enkripsi)
-- [ ] Backup dipindahkan/duplikat ke lokasi di luar VPS yang sama (bencana disk VPS)
+- `.env`, `config.yaml`, DB, dan sessions **tidak pernah** dalam plaintext backup.
+- Folder `skills/` berisi dokumentasi contoh sintaks (`***`, `$VAR`) — bukan rahasia runtime,
+  sehingga dikecualikan dari secret-leak scan konten (tetap di-backup).
+- [ ] Cek berkala log backup (`/var/log/hermes-backup.log` atau `/opt/data/_backups/backup.log`)
+- [ ] Pastikan minimal 1 backup lengkap (dengan `.enc`) berhasil per minggu
+- [ ] Simulasikan restore minimal sekali (lihat §3) — terutama decrypt archive rahasia
+- [ ] Salinan password enkripsi di tempat terpisah dari VPS
+- [ ] Duplikasikan backup ke lokasi di luar VPS (object storage / VPS lain)
